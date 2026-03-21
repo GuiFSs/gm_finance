@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# G&M Finance
+
+Private financial management web app for two users (Guilherme and Maryane), built with Next.js App Router and Feature-Sliced Design.
+
+## Stack
+
+- Next.js App Router + React + TypeScript (strict mode)
+- TailwindCSS + shadcn-style reusable UI + Lucide + Recharts
+- Zustand (UI state) + TanStack Query (server state with 30s cache)
+- React Hook Form + Zod
+- Next.js Route Handlers (API)
+- Turso (libSQL/SQLite) + Drizzle ORM + Drizzle migrations
+- JWT session in `httpOnly` cookie
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Configure environment:
+
+```bash
+cp .env.example .env.local
+```
+
+Required variables:
+
+- `DATABASE_URL`
+- `TURSO_AUTH_TOKEN`
+- `JWT_SECRET`
+- `LOGIN_PIN` (backend-only login PIN)
+
+3. Run migrations:
+
+```bash
+npm run db:migrate
+```
+
+4. Start dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Default users
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Initial seed runs automatically when `/api/auth/users` is accessed:
 
-## Learn More
+- Guilherme
+- Maryane
 
-To learn more about Next.js, take a look at the following resources:
+PIN validation is backend-only and read from `LOGIN_PIN` env variable.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure (FSD)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/app` and `src/app/api` for pages and route handlers
+- `src/features` for screen-level and use-case UI modules
+- `src/entities` for domain entity types/models
+- `src/shared` for reusable UI, hooks, libs, utils, and types
+- `src/db` for schema, migrations, and db client
+- `src/store` for Zustand UI store
 
-## Deploy on Vercel
+## Main routes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/login`
+- `/dashboard`
+- `/purchases` and `/purchases/new`
+- `/pockets`
+- `/cards`
+- `/recurring`
+- `/goals`
+- `/deposits`

@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 
 import { getSessionFromCookies } from "@/shared/lib/auth";
 
-export default async function Home() {
+export async function requireSession() {
   const session = await getSessionFromCookies();
-  if (session) {
-    redirect("/dashboard");
+  if (!session) {
+    redirect("/login");
   }
-  redirect("/login");
+  return session;
 }

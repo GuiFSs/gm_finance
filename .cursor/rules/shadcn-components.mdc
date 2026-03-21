@@ -1,0 +1,37 @@
+---
+description: Always use shadcn components via MCP; install with CLI, use from project UI
+alwaysApply: true
+---
+
+# Use shadcn Components (Never Build UI from Scratch)
+
+Always use **shadcn/ui** components. Do not implement buttons, modals, dialogs, forms, cards, inputs, selects, etc. by hand.
+
+## Workflow
+
+1. **Discover**: Use the **shadcn MCP** to find the right component:
+   - `search_items_in_registries` with `registries: ["@shadcn"]` and a `query` (e.g. "dialog", "modal", "button", "select").
+   - Or `list_items_in_registries` with `registries: ["@shadcn"]` to browse.
+
+2. **Install**: Get the add command and run it in the project:
+   - Call `get_add_command_for_items` with `items: ["@shadcn/<component-name>"]` (e.g. `["@shadcn/dialog"]`).
+   - Run the returned `npx shadcn@latest add ...` command in the project root so components are installed into the project (e.g. `src/shared/ui` or path from `components.json`).
+
+3. **Use**: Import and use the **installed** component from the project’s UI path (e.g. `@/shared/ui/button`, `@/shared/ui/dialog`), not from `node_modules`. Match the existing import style in the codebase.
+
+## Rules
+
+- **Never** create custom implementations of primitives that shadcn provides (buttons, modals/dialogs, inputs, labels, cards, selects, dropdowns, etc.). Install and use the shadcn version.
+- **Always** use the shadcn MCP to search/list and to get the exact `add` command before adding a new component.
+- For usage examples after installing, use `get_item_examples_from_registries` with `registries: ["@shadcn"]` and a `query` like `"dialog-demo"` or `"<component>-example"`.
+- Prefer existing installed components in the project; only run `add` for components that are not already present in the UI folder.
+
+## MCP server
+
+- **Server**: shadcn (project-0-gm_finance-shadcn).
+- **Registry**: `@shadcn` (from `get_project_registries`).
+- **Tool names**: `search_items_in_registries`, `list_items_in_registries`, `get_add_command_for_items`, `get_item_examples_from_registries`, `get_project_registries`.
+
+## Project convention
+
+- UI components live under `src/shared/ui` and are imported via `@/shared/ui/<component>` (e.g. `@/shared/ui/button`, `@/shared/ui/card`). Use the same path pattern for newly added shadcn components.
