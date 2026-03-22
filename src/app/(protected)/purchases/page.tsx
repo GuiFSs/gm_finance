@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { PurchaseList } from "@/features/purchases/purchase-list";
 
 export default function PurchasesPage() {
@@ -11,7 +13,9 @@ export default function PurchasesPage() {
           Registre e acompanhe suas compras e gastos.
         </p>
       </header>
-      <PurchaseList />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Carregando…</p>}>
+        <PurchaseList />
+      </Suspense>
     </div>
   );
 }

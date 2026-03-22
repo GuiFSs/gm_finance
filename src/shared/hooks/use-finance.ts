@@ -12,7 +12,7 @@ export function useDashboard() {
   });
 }
 
-type MonthMovementRow = {
+export type MonthMovementRow = {
   id: string;
   type: "in" | "out" | "future_out";
   date: string;
@@ -23,6 +23,11 @@ type MonthMovementRow = {
   sourceType?: "account" | "pocket" | "card";
   sourceId?: string | null;
   extra?: string | null;
+  purchaseId?: string;
+  installmentNumber?: number;
+  installmentCount?: number;
+  statementMonth?: string;
+  dueDate?: string | null;
 };
 
 type SourcesSummaryRow = {
@@ -46,6 +51,41 @@ export function useMonthMovements(month?: string) {
   });
 }
 
+export type PurchaseDetailData = {
+  id: string;
+  title: string;
+  description: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  paymentSourceType: string;
+  paymentSourceId: string | null;
+  cardName: string | null;
+  pocketName: string | null;
+  closingDay: number | null;
+  dueDay: number | null;
+  totalAmount: number;
+  firstPurchaseDate: string;
+  tagIds: string[];
+  installments: Array<{
+    id: string;
+    purchaseDate: string;
+    amount: number;
+    installmentNumber: number;
+    installmentCount: number;
+    statementMonth: string | null;
+    dueDate: string | null;
+  }>;
+};
+
+export function usePurchaseDetail(purchaseId: string | null) {
+  return useQuery({
+    queryKey: ["purchase", purchaseId],
+    queryFn: () => fetcher<{ data: PurchaseDetailData }>(`/api/purchases/${purchaseId}`),
+    select: (response) => response.data,
+    enabled: Boolean(purchaseId),
+  });
+}
+
 export function usePurchases(filters: Record<string, string | undefined>) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
@@ -64,6 +104,35 @@ export function useCreatePurchase() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    },
+  });
+}
+
+export function useUpdatePurchase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ purchaseId, ...body }: Record<string, unknown> & { purchaseId: string }) =>
+      fetcher(`/api/purchases/${purchaseId}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase", variables.purchaseId] });
+    },
+  });
+}
+
+export function useDeletePurchase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (purchaseId: string) =>
+      fetcher<{ data: { success: boolean } }>(`/api/purchases/${purchaseId}`, { method: "DELETE" }),
+    onSuccess: (_data, purchaseId) => {
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.removeQueries({ queryKey: ["purchase", purchaseId] });
     },
   });
 }
@@ -161,7 +230,7 @@ export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
-      fetcher("/api/categories", { method: "POST", body: JSON.stringify(payload) }),
+      fetcher<{ data: NamedEntity }>("/api/categories", { method: "POST", body: JSON.stringify(payload) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["categories"] }),
   });
 }
@@ -233,8 +302,12 @@ export function useRunRecurring() {
     mutationFn: () => fetcher("/api/recurring/run", { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["recurring-deposits"] });
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["deposits"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
     },
   });
 }
@@ -272,7 +345,60 @@ export function useCreateDeposit() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
     },
+  });
+}
+
+export function useRecurringDeposits() {
+  return useQuery({
+    queryKey: ["recurring-deposits"],
+    queryFn: () => fetcher<{ data: RecurringDepositRow[] }>("/api/recurring-deposits"),
+    select: (response) => response.data,
+  });
+}
+
+export function useCreateRecurringDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      fetcher("/api/recurring-deposits", { method: "POST", body: JSON.stringify(payload) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recurring-deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useUpdateRecurringDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      id: string;
+      title: string;
+      amount: number;
+      nextExecutionDate: string;
+      splits: Array<{ targetType: "account" | "pocket"; pocketId?: string; percent: number }>;
+    }) =>
+      fetcher(`/api/recurring-deposits/${payload.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: payload.title,
+          amount: payload.amount,
+          nextExecutionDate: payload.nextExecutionDate,
+          splits: payload.splits,
+        }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recurring-deposits"] }),
+  });
+}
+
+export function useDeleteRecurringDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetcher(`/api/recurring-deposits/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recurring-deposits"] }),
   });
 }
 
@@ -289,7 +415,7 @@ export function useCreateAdjustment() {
 }
 
 type NamedEntity = { id: string; name: string };
-type PurchaseRow = {
+export type PurchaseRow = {
   id: string;
   title: string;
   amount: number;
@@ -297,6 +423,7 @@ type PurchaseRow = {
   categoryName: string | null;
   userName: string | null;
   paymentSourceType: "account" | "pocket" | "card";
+  paymentSourceId: string | null;
   installmentNumber: number;
   installmentCount: number;
   tags: string[];
@@ -327,11 +454,44 @@ type GoalRow = {
   deadline: string | null;
   progressAmount: number;
 };
+export type DepositSplitRow = {
+  id: string;
+  targetType: "account" | "pocket";
+  pocketId: string | null;
+  pocketName: string | null;
+  amount: number;
+  sortOrder: number;
+};
+
 type DepositRow = {
   id: string;
   title: string;
   amount: number;
   depositDate: string;
+  recurringDepositId: string | null;
+  createdByUserId: string;
+  createdAt: number;
+  splits: DepositSplitRow[];
+};
+
+export type RecurringDepositSplitRow = {
+  id: string;
+  targetType: "account" | "pocket";
+  pocketId: string | null;
+  pocketName: string | null;
+  percent: number;
+  sortOrder: number;
+};
+
+export type RecurringDepositRow = {
+  id: string;
+  title: string;
+  amount: number;
+  recurrenceType: string;
+  nextExecutionDate: string;
+  createdByUserId: string;
+  isActive: boolean;
+  splits: RecurringDepositSplitRow[];
 };
 type DashboardData = {
   totalBalance: number;
@@ -350,5 +510,11 @@ type DashboardData = {
     cardName: string | null;
   }>;
   upcomingRecurring: Array<{ title: string; amount: number; nextExecutionDate: string }>;
+  upcomingRecurringDeposits: Array<{
+    title: string;
+    amount: number;
+    nextExecutionDate: string;
+    destinationSummary: string;
+  }>;
   cardUsage: Array<{ cardId: string; cardName: string; creditLimit: number; used: number }>;
 };

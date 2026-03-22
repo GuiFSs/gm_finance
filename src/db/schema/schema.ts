@@ -3,6 +3,7 @@ import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const paymentSourceTypeEnum = ["account", "pocket", "card"] as const;
 export const adjustmentTargetTypeEnum = ["account", "pocket"] as const;
+export const depositTargetTypeEnum = ["account", "pocket"] as const;
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -53,6 +54,34 @@ export const tags = sqliteTable("tags", {
   createdByUserId: text("created_by_user_id")
     .notNull()
     .references(() => users.id),
+});
+
+export const recurringDeposits = sqliteTable("recurring_deposits", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  amount: real("amount").notNull(),
+  recurrenceType: text("recurrence_type").notNull().default("monthly"),
+  nextExecutionDate: text("next_execution_date").notNull(),
+  targetType: text("target_type", { enum: depositTargetTypeEnum }),
+  pocketId: text("pocket_id").references(() => pockets.id),
+  createdByUserId: text("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
+export const recurringDepositSplits = sqliteTable("recurring_deposit_splits", {
+  id: text("id").primaryKey(),
+  recurringDepositId: text("recurring_deposit_id")
+    .notNull()
+    .references(() => recurringDeposits.id, { onDelete: "cascade" }),
+  targetType: text("target_type", { enum: depositTargetTypeEnum }).notNull(),
+  pocketId: text("pocket_id").references(() => pockets.id),
+  percent: real("percent").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 export const recurringExpenses = sqliteTable("recurring_expenses", {
@@ -110,12 +139,26 @@ export const deposits = sqliteTable("deposits", {
   title: text("title").notNull(),
   amount: real("amount").notNull(),
   depositDate: text("deposit_date").notNull(),
+  targetType: text("target_type", { enum: depositTargetTypeEnum }).default("account"),
+  pocketId: text("pocket_id").references(() => pockets.id),
+  recurringDepositId: text("recurring_deposit_id").references(() => recurringDeposits.id),
   createdByUserId: text("created_by_user_id")
     .notNull()
     .references(() => users.id),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
+});
+
+export const depositSplits = sqliteTable("deposit_splits", {
+  id: text("id").primaryKey(),
+  depositId: text("deposit_id")
+    .notNull()
+    .references(() => deposits.id, { onDelete: "cascade" }),
+  targetType: text("target_type", { enum: depositTargetTypeEnum }).notNull(),
+  pocketId: text("pocket_id").references(() => pockets.id),
+  amount: real("amount").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 export const accountEntries = sqliteTable("account_entries", {

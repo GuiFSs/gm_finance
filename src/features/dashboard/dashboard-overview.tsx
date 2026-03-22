@@ -236,6 +236,26 @@ export function DashboardOverview() {
           </ul>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Depósitos recorrentes próximos</CardTitle>
+          </CardHeader>
+          <CardContent>
+          <ul className="space-y-3 text-sm text-muted-foreground">
+            {data.upcomingRecurringDeposits.length === 0 ? (
+              <li>Nenhum depósito recorrente ativo.</li>
+            ) : (
+              data.upcomingRecurringDeposits.map((rec, idx) => (
+                <li key={`recurring-dep-${rec.nextExecutionDate}-${idx}`}>
+                  {formatDisplayDate(rec.nextExecutionDate)} - {rec.title} ({formatCurrency(rec.amount)})
+                  <span className="text-xs"> · {rec.destinationSummary}</span>
+                </li>
+              ))
+            )}
+          </ul>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

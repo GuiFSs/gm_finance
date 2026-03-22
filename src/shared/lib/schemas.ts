@@ -19,6 +19,9 @@ export const createPurchaseSchema = z.object({
   tagIds: z.array(z.string()).default([]),
 });
 
+/** Mesmos campos do POST, sem createdByUserId (vem da sessão no PATCH). */
+export const updatePurchaseSchema = createPurchaseSchema.omit({ createdByUserId: true });
+
 export const createPocketSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -110,12 +113,101 @@ export const createGoalSchema = z.object({
   deadline: z.string().optional(),
 });
 
-export const createDepositSchema = z.object({
-  title: z.string().min(1),
+export const depositSplitInputSchema = z.object({
+  targetType: z.enum(["account", "pocket"]),
+  pocketId: z.string().optional(),
   amount: z.coerce.number().positive(),
-  depositDate: z.string().min(1),
-  createdByUserId: z.string().min(1),
 });
+
+export const createDepositSchema = z
+  .object({
+    title: z.string().min(1),
+    amount: z.coerce.number().positive(),
+    depositDate: z.string().min(1),
+    createdByUserId: z.string().min(1),
+    splits: z.array(depositSplitInputSchema).min(1),
+  })
+  .superRefine((data, ctx) => {
+    const sum = data.splits.reduce((a, s) => a + s.amount, 0);
+    if (Math.abs(sum - data.amount) > 0.02) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A soma das partes deve ser igual ao valor total.",
+        path: ["splits"],
+      });
+    }
+    data.splits.forEach((s, i) => {
+      if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecione a caixinha",
+          path: ["splits", i, "pocketId"],
+        });
+      }
+    });
+  });
+
+export const recurringDepositSplitInputSchema = z.object({
+  targetType: z.enum(["account", "pocket"]),
+  pocketId: z.string().optional(),
+  percent: z.coerce.number().positive(),
+});
+
+export const createRecurringDepositSchema = z
+  .object({
+    title: z.string().min(1),
+    amount: z.coerce.number().positive(),
+    recurrenceType: z.literal("monthly").default("monthly"),
+    nextExecutionDate: z.string().min(1),
+    createdByUserId: z.string().min(1),
+    splits: z.array(recurringDepositSplitInputSchema).min(1),
+  })
+  .superRefine((data, ctx) => {
+    const sum = data.splits.reduce((a, s) => a + s.percent, 0);
+    if (Math.abs(sum - 100) > 0.05) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "As porcentagens devem somar 100%.",
+        path: ["splits"],
+      });
+    }
+    data.splits.forEach((s, i) => {
+      if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecione a caixinha",
+          path: ["splits", i, "pocketId"],
+        });
+      }
+    });
+  });
+
+export const updateRecurringDepositSchema = z
+  .object({
+    title: z.string().min(1),
+    amount: z.coerce.number().positive(),
+    nextExecutionDate: z.string().min(1),
+    splits: z.array(recurringDepositSplitInputSchema).min(1),
+  })
+  .superRefine((data, ctx) => {
+    const sum = data.splits.reduce((a, s) => a + s.percent, 0);
+    if (Math.abs(sum - 100) > 0.05) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "As porcentagens devem somar 100%.",
+        path: ["splits"],
+      });
+    }
+    data.splits.forEach((s, i) => {
+      if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecione a caixinha",
+          path: ["splits", i, "pocketId"],
+        });
+      }
+    });
+  });
 
 export const createAdjustmentSchema = z.object({
   targetType: z.enum(["account", "pocket"]),

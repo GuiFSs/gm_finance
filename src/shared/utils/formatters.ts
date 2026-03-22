@@ -42,3 +42,19 @@ export function formatDisplayDate(isoDate: string): string {
   if (!d || !m || !y) return isoDate;
   return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
 }
+
+/** Mês civil legível a partir de yyyy-MM-dd (ex.: "fevereiro de 2025"). */
+export function formatCalendarMonthLabel(isoDate: string): string {
+  const [y, m] = isoDate.split("-").map(Number);
+  if (!y || !m) return isoDate;
+  const name = new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** Mês legível a partir de yyyy-MM (ex.: fatura). */
+export function formatYearMonthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  const name = new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}

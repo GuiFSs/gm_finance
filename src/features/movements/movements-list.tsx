@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { useMonthMovements } from "@/shared/hooks/use-app-data";
-import { formatCurrency, formatDisplayDate } from "@/shared/utils/formatters";
+import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
+import { useMonthMovements, type MonthMovementRow } from "@/shared/hooks/use-app-data";
+import { formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 
@@ -24,21 +26,163 @@ const currentMonthParam = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
-function formatMonthLabel(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  if (!y || !m) return ym;
-  const name = new Date(y, m - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
-
 function addMonths(ym: string, delta: number): string {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function groupMovements(list: MonthMovementRow[] | undefined) {
+  if (!list) return { incoming: [] as MonthMovementRow[], outgoing: [] as MonthMovementRow[], future: [] as MonthMovementRow[] };
+  return {
+    incoming: list.filter((x) => x.type === "in"),
+    outgoing: list.filter((x) => x.type === "out"),
+    future: list.filter((x) => x.type === "future_out"),
+  };
+}
+
+function OutMovementRow({
+  item,
+  onSelectPurchase,
+}: {
+  item: MonthMovementRow;
+  onSelectPurchase: (id: string) => void;
+}) {
+  const isCard = item.sourceType === "card";
+  const isClickable = Boolean(item.purchaseId);
+
+  const inner = (
+    <>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowUpCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-500" />
+          <span className="font-medium text-red-950 dark:text-red-100">{item.title}</span>
+          {isCard ? (
+            <Badge variant="outline" className="font-normal">
+              Cartão
+            </Badge>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3 w-3 shrink-0" />
+            {formatDisplayDate(item.date)}
+          </span>
+          {item.category ? <span>{item.category}</span> : null}
+          {item.source ? <span>{item.source}</span> : null}
+          {item.installmentCount && item.installmentCount > 1 ? (
+            <span className="tabular-nums">
+              Parcela {item.installmentNumber}/{item.installmentCount}
+            </span>
+          ) : null}
+        </div>
+        {isCard && item.statementMonth ? (
+          <div className="pl-6 text-xs text-muted-foreground">
+            Fatura de <span className="font-medium text-foreground">{formatYearMonthLabel(item.statementMonth)}</span>
+            {item.dueDate ? (
+              <>
+                {" "}
+                · venc. <span className="font-medium text-foreground">{formatDisplayDate(item.dueDate)}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-right font-semibold tabular-nums text-red-700 dark:text-red-400">
+          {formatCurrency(item.amount)}
+        </span>
+        {isClickable ? (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+        ) : null}
+      </div>
+    </>
+  );
+
+  const baseClass =
+    "flex w-full items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/80 px-3 py-3 text-left transition dark:border-red-900/50 dark:bg-red-950/30";
+
+  if (isClickable) {
+    return (
+      <button type="button" className={`${baseClass} hover:bg-red-100/90 dark:hover:bg-red-950/50`} onClick={() => onSelectPurchase(item.purchaseId!)}>
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className={baseClass}>{inner}</div>;
+}
+
+function FutureMovementRow({ item }: { item: MonthMovementRow }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/25">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowUpCircle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
+          <span className="font-medium text-amber-950 dark:text-amber-100">{item.title}</span>
+          <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/50 dark:text-amber-100">
+            Previsto
+          </Badge>
+          {item.sourceType === "card" ? (
+            <Badge variant="outline" className="font-normal">
+              Cartão
+            </Badge>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3 w-3 shrink-0" />
+            {formatDisplayDate(item.date)}
+          </span>
+          {item.source ? <span>{item.source}</span> : null}
+        </div>
+        {item.sourceType === "card" && item.statementMonth ? (
+          <div className="pl-6 text-xs text-muted-foreground">
+            Fatura de <span className="font-medium text-foreground">{formatYearMonthLabel(item.statementMonth)}</span>
+            {item.dueDate ? (
+              <>
+                {" "}
+                · venc. <span className="font-medium text-foreground">{formatDisplayDate(item.dueDate)}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <span className="shrink-0 font-semibold tabular-nums text-amber-900 dark:text-amber-200/90">
+        {formatCurrency(item.amount)}
+      </span>
+    </div>
+  );
+}
+
+function InMovementRow({ item }: { item: MonthMovementRow }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-3 dark:border-green-900/50 dark:bg-green-950/30">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowDownCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-500" />
+          <span className="font-medium text-green-900 dark:text-green-100">{item.title}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {formatDisplayDate(item.date)}
+          </span>
+          {item.category ? <span>{item.category}</span> : null}
+          {item.source ? <span>{item.source}</span> : null}
+          {item.extra ? <span>{item.extra}</span> : null}
+        </div>
+      </div>
+      <span className="shrink-0 font-semibold tabular-nums text-green-700 dark:text-green-400">
+        +{formatCurrency(item.amount)}
+      </span>
+    </div>
+  );
+}
+
 export function MovementsList() {
   const [month, setMonth] = useState<string>(currentMonthParam);
+  const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
   const { data: movementsResponse, isLoading } = useMonthMovements(month);
   const list = movementsResponse?.data;
   const sourcesSummary = movementsResponse?.sourcesSummary;
@@ -48,6 +192,8 @@ export function MovementsList() {
   const maxMonth = addMonths(current, 12);
   const canGoPrev = month > minMonth;
   const canGoNext = month < maxMonth;
+
+  const grouped = useMemo(() => groupMovements(list), [list]);
 
   const totals = useMemo(() => {
     if (!list) return { in: 0, out: 0 };
@@ -71,6 +217,14 @@ export function MovementsList() {
 
   return (
     <div className="space-y-4">
+      <PurchaseDetailDialog
+        purchaseId={detailPurchaseId}
+        open={detailPurchaseId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailPurchaseId(null);
+        }}
+      />
+
       {isCurrentMonth && hasAnySource && sourcesSummary && (
         <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10">
           <CardHeader className="pb-2">
@@ -227,7 +381,7 @@ export function MovementsList() {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="min-w-40 text-center text-sm font-medium text-foreground">
-                {formatMonthLabel(month)}
+                {formatYearMonthLabel(month)}
               </span>
               <Button
                 type="button"
@@ -255,7 +409,7 @@ export function MovementsList() {
             </p>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 dark:bg-muted/20">
+              <div className="mb-6 flex flex-wrap gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 dark:bg-muted/20">
                 <div className="flex items-center gap-2">
                   <ArrowDownCircle className="h-5 w-5 text-green-600 dark:text-green-500" />
                   <span className="text-sm text-muted-foreground">Entradas:</span>
@@ -271,62 +425,50 @@ export function MovementsList() {
                   </span>
                 </div>
               </div>
-              <ul className="space-y-2">
-                {list.map((item) => (
-                  <li key={item.id}>
-                    <div
-                      className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${
-                        item.type === "in"
-                          ? "border-green-200 bg-green-50/80 dark:border-green-900/50 dark:bg-green-950/30"
-                          : "border-red-200 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/30"
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {item.type === "in" ? (
-                            <ArrowDownCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-500" />
-                          ) : (
-                            <ArrowUpCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-500" />
-                          )}
-                          <span
-                            className={`font-medium ${
-                              item.type === "in"
-                                ? "text-green-900 dark:text-green-100"
-                                : "text-red-900 dark:text-red-100"
-                            }`}
-                          >
-                            {item.title}
-                          </span>
-                          {item.type === "future_out" && (
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                              Previsto
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDisplayDate(item.date)}
-                          </span>
-                          {item.category && <span>{item.category}</span>}
-                          {item.source && <span>De: {item.source}</span>}
-                          {item.extra && <span>{item.extra}</span>}
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 text-right font-semibold tabular-nums ${
-                          item.type === "in"
-                            ? "text-green-700 dark:text-green-400"
-                            : "text-red-700 dark:text-red-400"
-                        }`}
-                      >
-                        {item.type === "in" ? "+" : ""}
-                        {formatCurrency(item.amount)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+
+              <div className="space-y-8">
+                {grouped.incoming.length > 0 ? (
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Entradas</h2>
+                    <ul className="space-y-2">
+                      {grouped.incoming.map((item) => (
+                        <li key={item.id}>
+                          <InMovementRow item={item} />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {grouped.outgoing.length > 0 ? (
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Despesas</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Toque em uma despesa cadastrada para ver parcelas, fatura do cartão e vencimento.
+                    </p>
+                    <ul className="space-y-2">
+                      {grouped.outgoing.map((item) => (
+                        <li key={item.id}>
+                          <OutMovementRow item={item} onSelectPurchase={setDetailPurchaseId} />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {grouped.future.length > 0 ? (
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recorrentes previstas</h2>
+                    <ul className="space-y-2">
+                      {grouped.future.map((item) => (
+                        <li key={item.id}>
+                          <FutureMovementRow item={item} />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+              </div>
             </>
           )}
         </CardContent>

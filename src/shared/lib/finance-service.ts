@@ -1,8 +1,18 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, ne, sql } from "drizzle-orm";
-import { addMonths, endOfMonth, format, startOfMonth } from "date-fns";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import { addMonths, endOfMonth, format, getDate, parseISO, startOfMonth } from "date-fns";
 
 import { db, schema } from "@/db";
 import type { PaymentSourceType } from "@/shared/types/domain";
+import { DEPOSIT_SUM_EPS, distributeAmountsByPercent } from "@/shared/lib/deposit-split";
+import { formatCurrency } from "@/shared/utils/formatters";
+
+export type DepositSplitInput = {
+  targetType: "account" | "pocket";
+  pocketId?: string | null;
+  amount: number;
+};
+
+export { distributeAmountsByPercent } from "@/shared/lib/deposit-split";
 
 type PurchaseInput = {
   title: string;
@@ -55,7 +65,9 @@ export async function getTotalBalance() {
   return checking + pocketTotal;
 }
 
-export async function createPurchase(input: PurchaseInput) {
+type DbExecutor = Pick<typeof db, "insert" | "delete" | "select">;
+
+async function insertPurchaseWithLedger(executor: DbExecutor, input: PurchaseInput) {
   const installments = Math.max(1, input.installmentCount);
   const purchaseDate = new Date(input.purchaseDate);
 
@@ -77,7 +89,7 @@ export async function createPurchase(input: PurchaseInput) {
     };
   });
 
-  await db.insert(schema.purchases).values(purchaseRows);
+  await executor.insert(schema.purchases).values(purchaseRows);
 
   const firstPurchaseId = purchaseRows[0]?.id;
   if (!firstPurchaseId) return;
@@ -87,12 +99,12 @@ export async function createPurchase(input: PurchaseInput) {
       purchaseId: firstPurchaseId,
       tagId,
     }));
-    await db.insert(schema.purchaseTags).values(tagRows);
+    await executor.insert(schema.purchaseTags).values(tagRows);
   }
 
   for (const row of purchaseRows) {
     if (row.paymentSourceType === "account") {
-      await db.insert(schema.accountEntries).values({
+      await executor.insert(schema.accountEntries).values({
         id: crypto.randomUUID(),
         amount: -Math.abs(row.amount),
         entryType: "purchase",
@@ -104,7 +116,7 @@ export async function createPurchase(input: PurchaseInput) {
     }
 
     if (row.paymentSourceType === "pocket" && row.paymentSourceId) {
-      await db.insert(schema.pocketEntries).values({
+      await executor.insert(schema.pocketEntries).values({
         id: crypto.randomUUID(),
         pocketId: row.paymentSourceId,
         amount: -Math.abs(row.amount),
@@ -118,30 +130,114 @@ export async function createPurchase(input: PurchaseInput) {
   }
 }
 
+export async function createPurchase(input: PurchaseInput) {
+  await insertPurchaseWithLedger(db, input);
+}
+
+export async function deletePurchaseGroup(purchaseId: string, userId: string): Promise<boolean> {
+  const detail = await getPurchaseDetailById(purchaseId, userId);
+  if (!detail) return false;
+  const ids = detail.installments.map((i) => i.id);
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.purchaseTags).where(inArray(schema.purchaseTags.purchaseId, ids));
+    await tx.delete(schema.accountEntries).where(
+      and(eq(schema.accountEntries.referenceType, "purchase"), inArray(schema.accountEntries.referenceId, ids))
+    );
+    await tx.delete(schema.pocketEntries).where(
+      and(eq(schema.pocketEntries.referenceType, "purchase"), inArray(schema.pocketEntries.referenceId, ids))
+    );
+    await tx.delete(schema.purchases).where(inArray(schema.purchases.id, ids));
+  });
+  return true;
+}
+
+export async function updatePurchaseGroup(purchaseId: string, userId: string, input: PurchaseInput): Promise<boolean> {
+  const detail = await getPurchaseDetailById(purchaseId, userId);
+  if (!detail) return false;
+  const ids = detail.installments.map((i) => i.id);
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.purchaseTags).where(inArray(schema.purchaseTags.purchaseId, ids));
+    await tx.delete(schema.accountEntries).where(
+      and(eq(schema.accountEntries.referenceType, "purchase"), inArray(schema.accountEntries.referenceId, ids))
+    );
+    await tx.delete(schema.pocketEntries).where(
+      and(eq(schema.pocketEntries.referenceType, "purchase"), inArray(schema.pocketEntries.referenceId, ids))
+    );
+    await tx.delete(schema.purchases).where(inArray(schema.purchases.id, ids));
+    await insertPurchaseWithLedger(tx, input);
+  });
+  return true;
+}
+
 export async function createDeposit(input: {
   title: string;
   amount: number;
   depositDate: string;
   createdByUserId: string;
+  recurringDepositId?: string;
+  splits: DepositSplitInput[];
 }) {
+  if (input.splits.length === 0) {
+    throw new Error("Informe pelo menos um destino.");
+  }
+  const sum = input.splits.reduce((a, s) => a + s.amount, 0);
+  if (Math.abs(sum - input.amount) > DEPOSIT_SUM_EPS) {
+    throw new Error("A soma das partes deve ser igual ao valor total do depósito.");
+  }
+  for (const s of input.splits) {
+    if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+      throw new Error("Selecione a caixinha em cada parte que vai para caixinha.");
+    }
+  }
+
   const depositId = crypto.randomUUID();
+  const first = input.splits[0]!;
   await db.insert(schema.deposits).values({
     id: depositId,
     title: input.title,
     amount: input.amount,
     depositDate: input.depositDate,
     createdByUserId: input.createdByUserId,
+    targetType: first.targetType,
+    pocketId: first.targetType === "pocket" ? first.pocketId ?? null : null,
+    recurringDepositId: input.recurringDepositId ?? null,
   });
 
-  await db.insert(schema.accountEntries).values({
-    id: crypto.randomUUID(),
-    amount: Math.abs(input.amount),
-    entryType: "deposit",
-    referenceType: "deposit",
-    referenceId: depositId,
-    createdByUserId: input.createdByUserId,
-    occurredAt: input.depositDate,
-  });
+  for (let i = 0; i < input.splits.length; i++) {
+    const s = input.splits[i]!;
+    const amt = Math.abs(s.amount);
+    await db.insert(schema.depositSplits).values({
+      id: crypto.randomUUID(),
+      depositId,
+      targetType: s.targetType,
+      pocketId: s.targetType === "pocket" ? s.pocketId ?? null : null,
+      amount: amt,
+      sortOrder: i,
+    });
+
+    if (s.targetType === "account") {
+      await db.insert(schema.accountEntries).values({
+        id: crypto.randomUUID(),
+        amount: amt,
+        entryType: "deposit",
+        referenceType: "deposit",
+        referenceId: depositId,
+        createdByUserId: input.createdByUserId,
+        occurredAt: input.depositDate,
+      });
+    } else if (s.pocketId) {
+      await db.insert(schema.pocketEntries).values({
+        id: crypto.randomUUID(),
+        pocketId: s.pocketId,
+        amount: amt,
+        entryType: "deposit",
+        referenceType: "deposit",
+        referenceId: depositId,
+        createdByUserId: input.createdByUserId,
+        occurredAt: input.depositDate,
+      });
+    }
+  }
 }
 
 export async function createTransfer(input: {
@@ -226,6 +322,58 @@ export async function runRecurringExpenses() {
   }
 
   return recurringRows.length;
+}
+
+export async function runRecurringDeposits() {
+  const today = format(new Date(), "yyyy-MM-dd");
+  const rows = await db
+    .select()
+    .from(schema.recurringDeposits)
+    .where(and(eq(schema.recurringDeposits.isActive, true), lte(schema.recurringDeposits.nextExecutionDate, today)));
+
+  for (const r of rows) {
+    const splitRows = await db
+      .select()
+      .from(schema.recurringDepositSplits)
+      .where(eq(schema.recurringDepositSplits.recurringDepositId, r.id))
+      .orderBy(asc(schema.recurringDepositSplits.sortOrder));
+
+    let splits: DepositSplitInput[];
+    if (splitRows.length > 0) {
+      const percents = splitRows.map((s) => s.percent);
+      const amounts = distributeAmountsByPercent(r.amount, percents);
+      splits = splitRows.map((s, i) => ({
+        targetType: s.targetType as "account" | "pocket",
+        pocketId: s.pocketId,
+        amount: amounts[i] ?? 0,
+      }));
+    } else {
+      splits = [
+        {
+          targetType: (r.targetType as "account" | "pocket") ?? "account",
+          pocketId: r.pocketId,
+          amount: r.amount,
+        },
+      ];
+    }
+
+    await createDeposit({
+      title: r.title,
+      amount: r.amount,
+      depositDate: r.nextExecutionDate,
+      createdByUserId: r.createdByUserId,
+      recurringDepositId: r.id,
+      splits,
+    });
+    await db
+      .update(schema.recurringDeposits)
+      .set({
+        nextExecutionDate: format(addMonths(new Date(r.nextExecutionDate), 1), "yyyy-MM-dd"),
+      })
+      .where(eq(schema.recurringDeposits.id, r.id));
+  }
+
+  return rows.length;
 }
 
 export async function createBalanceAdjustment(input: {
@@ -399,6 +547,61 @@ export async function getDashboardData() {
     .orderBy(asc(schema.recurringExpenses.nextExecutionDate))
     .limit(8);
 
+  const upcomingRecurringDepositRows = await db
+    .select({
+      id: schema.recurringDeposits.id,
+      title: schema.recurringDeposits.title,
+      amount: schema.recurringDeposits.amount,
+      nextExecutionDate: schema.recurringDeposits.nextExecutionDate,
+    })
+    .from(schema.recurringDeposits)
+    .where(eq(schema.recurringDeposits.isActive, true))
+    .orderBy(asc(schema.recurringDeposits.nextExecutionDate))
+    .limit(8);
+
+  const urdIds = upcomingRecurringDepositRows.map((r) => r.id);
+  const urdSplitRows =
+    urdIds.length > 0
+      ? await db
+          .select({
+            recurringDepositId: schema.recurringDepositSplits.recurringDepositId,
+            targetType: schema.recurringDepositSplits.targetType,
+            percent: schema.recurringDepositSplits.percent,
+            pocketName: schema.pockets.name,
+          })
+          .from(schema.recurringDepositSplits)
+          .leftJoin(schema.pockets, eq(schema.pockets.id, schema.recurringDepositSplits.pocketId))
+          .where(inArray(schema.recurringDepositSplits.recurringDepositId, urdIds))
+          .orderBy(asc(schema.recurringDepositSplits.sortOrder))
+      : [];
+
+  const urdSplitsMap = new Map<string, typeof urdSplitRows>();
+  for (const row of urdSplitRows) {
+    const list = urdSplitsMap.get(row.recurringDepositId) ?? [];
+    list.push(row);
+    urdSplitsMap.set(row.recurringDepositId, list);
+  }
+
+  const upcomingRecurringDeposits = upcomingRecurringDepositRows.map((row) => {
+    const parts = urdSplitsMap.get(row.id);
+    const destinationSummary =
+      parts && parts.length > 0
+        ? parts
+            .map((p) =>
+              p.targetType === "account"
+                ? `Conta ${Number(p.percent).toFixed(0)}%`
+                : `Caixinha ${p.pocketName ?? "?"} ${Number(p.percent).toFixed(0)}%`
+            )
+            .join(" · ")
+        : "Conta 100%";
+    return {
+      title: row.title,
+      amount: row.amount,
+      nextExecutionDate: row.nextExecutionDate,
+      destinationSummary,
+    };
+  });
+
   const cardUsage = await db
     .select({
       cardId: schema.cards.id,
@@ -423,6 +626,7 @@ export async function getDashboardData() {
     biggestExpenses,
     upcomingInstallments,
     upcomingRecurring,
+    upcomingRecurringDeposits,
     cardUsage,
   };
 }
@@ -458,7 +662,33 @@ export type MonthMovement = {
   sourceType?: "account" | "pocket" | "card";
   sourceId?: string | null;
   extra?: string | null;
+  /** Present for movements generated from a purchase row (opens detail dialog). */
+  purchaseId?: string;
+  installmentNumber?: number;
+  installmentCount?: number;
+  /** yyyy-MM — mês da fatura do cartão (quando aplicável). */
+  statementMonth?: string;
+  /** Data prevista de vencimento da fatura (cartão). */
+  dueDate?: string | null;
 };
+
+/** Mês de referência da fatura: compras no dia de fechamento em diante vão para o mês seguinte. */
+export function cardStatementMonth(purchaseDate: string, closingDay: number): string {
+  const d = parseISO(purchaseDate);
+  const day = getDate(d);
+  const anchor = day >= closingDay ? addMonths(d, 1) : d;
+  return format(startOfMonth(anchor), "yyyy-MM");
+}
+
+/** Vencimento no dia `dueDay` do mesmo mês de referência da fatura (não no mês seguinte). */
+export function cardDueDateForStatement(statementMonthYm: string, dueDay: number): string {
+  const [y, m] = statementMonthYm.split("-").map(Number);
+  if (!y || !m) return "";
+  const statementStart = new Date(y, m - 1, 1);
+  const lastDay = endOfMonth(statementStart).getDate();
+  const day = Math.min(Math.max(1, dueDay), lastDay);
+  return format(new Date(y, m - 1, day), "yyyy-MM-dd");
+}
 
 export type SourceSummary = {
   account?: { balance: number; outflows: number; sufficient: boolean };
@@ -469,24 +699,65 @@ export type SourceSummary = {
 export async function getMonthMovements(month: string): Promise<MonthMovement[]> {
   const [y, m] = month.split("-").map(Number);
   if (!y || !m) return [];
+  const targetYm = `${y}-${String(m).padStart(2, "0")}`;
   const start = format(startOfMonth(new Date(y, m - 1)), "yyyy-MM-dd");
   const end = format(endOfMonth(new Date(y, m - 1)), "yyyy-MM-dd");
   const today = format(new Date(), "yyyy-MM-dd");
   const movements: MonthMovement[] = [];
 
   const depositsInMonth = await db
-    .select({ id: schema.deposits.id, title: schema.deposits.title, amount: schema.deposits.amount, depositDate: schema.deposits.depositDate })
+    .select({
+      id: schema.deposits.id,
+      title: schema.deposits.title,
+      amount: schema.deposits.amount,
+      depositDate: schema.deposits.depositDate,
+    })
     .from(schema.deposits)
     .where(and(gte(schema.deposits.depositDate, start), lte(schema.deposits.depositDate, end)));
+
+  const depositIds = depositsInMonth.map((d) => d.id);
+  const splitRowsForMonth =
+    depositIds.length > 0
+      ? await db
+          .select({
+            depositId: schema.depositSplits.depositId,
+            targetType: schema.depositSplits.targetType,
+            amount: schema.depositSplits.amount,
+            pocketName: schema.pockets.name,
+          })
+          .from(schema.depositSplits)
+          .leftJoin(schema.pockets, eq(schema.pockets.id, schema.depositSplits.pocketId))
+          .where(inArray(schema.depositSplits.depositId, depositIds))
+          .orderBy(asc(schema.depositSplits.sortOrder))
+      : [];
+
+  const splitsByDeposit = new Map<string, typeof splitRowsForMonth>();
+  for (const row of splitRowsForMonth) {
+    const list = splitsByDeposit.get(row.depositId) ?? [];
+    list.push(row);
+    splitsByDeposit.set(row.depositId, list);
+  }
+
   for (const d of depositsInMonth) {
+    const parts = splitsByDeposit.get(d.id);
+    const source =
+      parts && parts.length > 0
+        ? parts
+            .map((p) =>
+              p.targetType === "account"
+                ? `Conta ${formatCurrency(p.amount)}`
+                : `Caixinha ${p.pocketName ?? "?"} ${formatCurrency(p.amount)}`
+            )
+            .join(" · ")
+        : "Conta corrente";
     movements.push({
       id: `deposit-${d.id}`,
       type: "in",
       date: d.depositDate,
       title: d.title,
       amount: d.amount,
-      source: "Conta corrente",
-      extra: "Depósito",
+      source,
+      extra: parts && parts.length > 1 ? "Depósito (dividido)" : "Depósito",
     });
   }
 
@@ -530,30 +801,59 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
     }
   }
 
-  const purchasesInMonth = await db
-    .select({
-      id: schema.purchases.id,
-      title: schema.purchases.title,
-      amount: schema.purchases.amount,
-      purchaseDate: schema.purchases.purchaseDate,
-      paymentSourceType: schema.purchases.paymentSourceType,
-      paymentSourceId: schema.purchases.paymentSourceId,
-      installmentNumber: schema.purchases.installmentNumber,
-      installmentCount: schema.purchases.installmentCount,
-      categoryName: schema.categories.name,
-      pocketName: schema.pockets.name,
-      cardName: schema.cards.name,
-    })
+  const purchaseFields = {
+    id: schema.purchases.id,
+    title: schema.purchases.title,
+    amount: schema.purchases.amount,
+    purchaseDate: schema.purchases.purchaseDate,
+    paymentSourceType: schema.purchases.paymentSourceType,
+    paymentSourceId: schema.purchases.paymentSourceId,
+    installmentNumber: schema.purchases.installmentNumber,
+    installmentCount: schema.purchases.installmentCount,
+    categoryName: schema.categories.name,
+    pocketName: schema.pockets.name,
+    cardName: schema.cards.name,
+    closingDay: schema.cards.closingDay,
+    dueDay: schema.cards.dueDay,
+  };
+
+  const nonCardPurchases = await db
+    .select(purchaseFields)
     .from(schema.purchases)
     .leftJoin(schema.categories, eq(schema.categories.id, schema.purchases.categoryId))
     .leftJoin(schema.pockets, eq(schema.pockets.id, schema.purchases.paymentSourceId))
     .leftJoin(schema.cards, eq(schema.cards.id, schema.purchases.paymentSourceId))
-    .where(and(gte(schema.purchases.purchaseDate, start), lte(schema.purchases.purchaseDate, end)));
-  for (const p of purchasesInMonth) {
+    .where(
+      and(
+        ne(schema.purchases.paymentSourceType, "card"),
+        gte(schema.purchases.purchaseDate, start),
+        lte(schema.purchases.purchaseDate, end)
+      )
+    );
+
+  const cardPurchasesAll = await db
+    .select(purchaseFields)
+    .from(schema.purchases)
+    .leftJoin(schema.categories, eq(schema.categories.id, schema.purchases.categoryId))
+    .leftJoin(schema.pockets, eq(schema.pockets.id, schema.purchases.paymentSourceId))
+    .leftJoin(schema.cards, eq(schema.cards.id, schema.purchases.paymentSourceId))
+    .where(eq(schema.purchases.paymentSourceType, "card"));
+
+  const cardPurchasesInMonth = cardPurchasesAll.filter(
+    (p) => p.closingDay != null && cardStatementMonth(p.purchaseDate, p.closingDay) === targetYm
+  );
+
+  for (const p of [...nonCardPurchases, ...cardPurchasesInMonth]) {
     let source = "Conta corrente";
     if (p.paymentSourceType === "pocket" && p.pocketName) source = `Caixinha ${p.pocketName}`;
     if (p.paymentSourceType === "card" && p.cardName) source = `Cartão ${p.cardName}`;
     const extra = (p.installmentCount ?? 0) > 1 ? `${p.installmentNumber}/${p.installmentCount} parcelas` : null;
+    let statementMonth: string | undefined;
+    let dueDate: string | null | undefined;
+    if (p.paymentSourceType === "card" && p.closingDay != null && p.dueDay != null) {
+      statementMonth = cardStatementMonth(p.purchaseDate, p.closingDay);
+      dueDate = cardDueDateForStatement(statementMonth, p.dueDay);
+    }
     movements.push({
       id: `purchase-${p.id}`,
       type: "out",
@@ -565,6 +865,11 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       sourceType: p.paymentSourceType as "account" | "pocket" | "card",
       sourceId: p.paymentSourceId ?? null,
       extra: extra ?? undefined,
+      purchaseId: p.id,
+      installmentNumber: p.installmentNumber,
+      installmentCount: p.installmentCount,
+      statementMonth,
+      dueDate: dueDate ?? null,
     });
   }
 
@@ -629,22 +934,29 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       paymentSourceId: schema.recurringExpenses.paymentSourceId,
       pocketName: schema.pockets.name,
       cardName: schema.cards.name,
+      closingDay: schema.cards.closingDay,
+      dueDay: schema.cards.dueDay,
     })
     .from(schema.recurringExpenses)
     .leftJoin(schema.pockets, eq(schema.pockets.id, schema.recurringExpenses.paymentSourceId))
     .leftJoin(schema.cards, eq(schema.cards.id, schema.recurringExpenses.paymentSourceId))
-    .where(
-      and(
-        eq(schema.recurringExpenses.isActive, true),
-        gte(schema.recurringExpenses.nextExecutionDate, start),
-        lte(schema.recurringExpenses.nextExecutionDate, end),
-        gt(schema.recurringExpenses.nextExecutionDate, today)
-      )
-    );
+    .where(and(eq(schema.recurringExpenses.isActive, true), gt(schema.recurringExpenses.nextExecutionDate, today)));
   for (const r of futureRecurring) {
+    const d = r.nextExecutionDate;
+    if (r.paymentSourceType === "card" && r.closingDay != null) {
+      if (cardStatementMonth(d, r.closingDay) !== targetYm) continue;
+    } else if (d < start || d > end) {
+      continue;
+    }
     let source = "Conta corrente";
     if (r.paymentSourceType === "pocket" && r.pocketName) source = `Caixinha ${r.pocketName}`;
     if (r.paymentSourceType === "card" && r.cardName) source = `Cartão ${r.cardName}`;
+    let statementMonth: string | undefined;
+    let dueDate: string | null | undefined;
+    if (r.paymentSourceType === "card" && r.closingDay != null && r.dueDay != null) {
+      statementMonth = cardStatementMonth(d, r.closingDay);
+      dueDate = cardDueDateForStatement(statementMonth, r.dueDay);
+    }
     movements.push({
       id: `future-${r.id}`,
       type: "future_out",
@@ -655,6 +967,8 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       sourceType: r.paymentSourceType as "account" | "pocket" | "card",
       sourceId: r.paymentSourceId ?? null,
       extra: "Recorrente (previsto)",
+      statementMonth,
+      dueDate: dueDate ?? null,
     });
   }
 
@@ -730,4 +1044,112 @@ export function computeSourcesSummary(
   }
 
   return summary;
+}
+
+export type PurchaseDetailInstallment = {
+  id: string;
+  purchaseDate: string;
+  amount: number;
+  installmentNumber: number;
+  installmentCount: number;
+  statementMonth: string | null;
+  dueDate: string | null;
+};
+
+export async function getPurchaseDetailById(purchaseId: string, userId: string) {
+  const row = await db
+    .select({
+      id: schema.purchases.id,
+      title: schema.purchases.title,
+      description: schema.purchases.description,
+      amount: schema.purchases.amount,
+      purchaseDate: schema.purchases.purchaseDate,
+      categoryId: schema.purchases.categoryId,
+      categoryName: schema.categories.name,
+      paymentSourceType: schema.purchases.paymentSourceType,
+      paymentSourceId: schema.purchases.paymentSourceId,
+      installmentNumber: schema.purchases.installmentNumber,
+      installmentCount: schema.purchases.installmentCount,
+      createdByUserId: schema.purchases.createdByUserId,
+      cardName: schema.cards.name,
+      pocketName: schema.pockets.name,
+      closingDay: schema.cards.closingDay,
+      dueDay: schema.cards.dueDay,
+    })
+    .from(schema.purchases)
+    .leftJoin(schema.categories, eq(schema.categories.id, schema.purchases.categoryId))
+    .leftJoin(schema.cards, eq(schema.cards.id, schema.purchases.paymentSourceId))
+    .leftJoin(schema.pockets, eq(schema.pockets.id, schema.purchases.paymentSourceId))
+    .where(eq(schema.purchases.id, purchaseId))
+    .limit(1);
+
+  const main = row[0];
+  if (!main || main.createdByUserId !== userId) return null;
+
+  const siblingWhere = and(
+    eq(schema.purchases.title, main.title),
+    eq(schema.purchases.paymentSourceType, main.paymentSourceType),
+    eq(schema.purchases.installmentCount, main.installmentCount),
+    eq(schema.purchases.createdByUserId, main.createdByUserId),
+    main.paymentSourceId ? eq(schema.purchases.paymentSourceId, main.paymentSourceId) : isNull(schema.purchases.paymentSourceId)
+  );
+
+  const siblings = await db
+    .select({
+      id: schema.purchases.id,
+      purchaseDate: schema.purchases.purchaseDate,
+      amount: schema.purchases.amount,
+      installmentNumber: schema.purchases.installmentNumber,
+      installmentCount: schema.purchases.installmentCount,
+    })
+    .from(schema.purchases)
+    .where(siblingWhere)
+    .orderBy(asc(schema.purchases.installmentNumber));
+
+  const totalAmount = siblings.reduce((sum, s) => sum + s.amount, 0);
+  const firstPurchaseIdForTags = siblings[0]?.id;
+  const tagRows =
+    firstPurchaseIdForTags === undefined
+      ? []
+      : await db
+          .select({ tagId: schema.purchaseTags.tagId })
+          .from(schema.purchaseTags)
+          .where(eq(schema.purchaseTags.purchaseId, firstPurchaseIdForTags));
+  const tagIds = tagRows.map((r) => r.tagId);
+
+  const installments: PurchaseDetailInstallment[] = siblings.map((s) => {
+    let statementMonth: string | null = null;
+    let dueDate: string | null = null;
+    if (main.paymentSourceType === "card" && main.closingDay != null && main.dueDay != null) {
+      statementMonth = cardStatementMonth(s.purchaseDate, main.closingDay);
+      dueDate = cardDueDateForStatement(statementMonth, main.dueDay);
+    }
+    return {
+      id: s.id,
+      purchaseDate: s.purchaseDate,
+      amount: s.amount,
+      installmentNumber: s.installmentNumber,
+      installmentCount: s.installmentCount,
+      statementMonth,
+      dueDate,
+    };
+  });
+
+  return {
+    id: main.id,
+    title: main.title,
+    description: main.description,
+    categoryId: main.categoryId ?? null,
+    categoryName: main.categoryName,
+    paymentSourceType: main.paymentSourceType,
+    paymentSourceId: main.paymentSourceId,
+    cardName: main.cardName,
+    pocketName: main.pocketName,
+    closingDay: main.closingDay,
+    dueDay: main.dueDay,
+    totalAmount,
+    firstPurchaseDate: siblings[0]?.purchaseDate ?? main.purchaseDate,
+    tagIds,
+    installments,
+  };
 }
