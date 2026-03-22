@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 
 import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
 import { useMonthMovements, type MonthMovementRow } from "@/shared/hooks/use-app-data";
+import { cn } from "@/shared/lib/cn";
 import { formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -39,6 +40,28 @@ function groupMovements(list: MonthMovementRow[] | undefined) {
     outgoing: list.filter((x) => x.type === "out"),
     future: list.filter((x) => x.type === "future_out"),
   };
+}
+
+function SourceMetric({
+  label,
+  value,
+  sublabel,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  sublabel?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-border/80 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/40">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={cn("text-base font-semibold tabular-nums leading-tight tracking-tight", valueClassName ?? "text-foreground")}>
+        {value}
+      </span>
+      {sublabel ? <span className="text-[10px] text-muted-foreground">{sublabel}</span> : null}
+    </div>
+  );
 }
 
 function OutMovementRow({
@@ -233,7 +256,8 @@ export function MovementsList() {
               Dinheiro suficiente por fonte?
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Comparação do saldo (ou limite disponível) de cada origem com as saídas do mês que saem dela.
+              Conta e caixinhas: saldo atual vs. saídas do mês. Cartão: o &quot;usado&quot; já inclui as compras do mês — o
+              limite disponível não é descontado de novo pelas saídas.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -318,46 +342,67 @@ export function MovementsList() {
             })}
             {sourcesSummary.cards.map((c) => {
               const available = c.creditLimit - c.used;
-              const after = available - c.outflows;
+              const estimatedAtMonthStart = available + c.outflows;
               return (
                 <div
                   key={c.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${
+                  className={`flex flex-col gap-3 rounded-lg border px-3 py-3 sm:px-4 sm:py-4 ${
                     c.sufficient
                       ? "border-green-200 bg-green-50/80 dark:border-green-900/50 dark:bg-green-950/30"
                       : "border-red-200 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/30"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <WalletCards className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="font-medium text-foreground">Cartão {c.name}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                    <span className="text-muted-foreground">
-                      Limite disponível: <span className="font-semibold tabular-nums text-foreground">{formatCurrency(available)}</span>
-                    </span>
-                    <span className="text-muted-foreground">
-                      Saídas do mês: <span className="font-semibold tabular-nums text-red-600 dark:text-red-500">{formatCurrency(c.outflows)}</span>
-                    </span>
-                    <span className="text-muted-foreground">
-                      Disponível após o mês: <span className={`font-semibold tabular-nums ${after >= 0 ? "text-foreground" : "text-destructive"}`}>{formatCurrency(after)}</span>
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <WalletCards className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate font-semibold text-foreground">Cartão {c.name}</span>
+                    </div>
                     {c.sufficient ? (
-                      <span className="flex items-center gap-1 font-medium text-green-700 dark:text-green-400">
-                        <CheckCircle2 className="h-4 w-4" /> Suficiente
-                      </span>
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 gap-1 border-green-600/45 bg-green-600/10 text-green-800 dark:border-green-500/50 dark:bg-green-500/15 dark:text-green-400"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Dentro do limite
+                      </Badge>
                     ) : (
-                      <span className="flex items-center gap-1 font-medium text-destructive">
-                        <AlertTriangle className="h-4 w-4" /> Insuficiente
-                      </span>
+                      <Badge variant="destructive" className="shrink-0 gap-1">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Acima do limite
+                      </Badge>
                     )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+                    <SourceMetric label="Limite contratado" value={formatCurrency(c.creditLimit)} />
+                    <SourceMetric label="Já utilizado" value={formatCurrency(c.used)} />
+                    <SourceMetric
+                      label="Disponível agora"
+                      value={formatCurrency(available)}
+                      valueClassName={available >= 0 ? "text-foreground" : "text-destructive"}
+                      sublabel="Limite − uso"
+                    />
+                    <SourceMetric
+                      label="Compras no mês"
+                      value={formatCurrency(c.outflows)}
+                      valueClassName="text-red-600 dark:text-red-400"
+                      sublabel="Soma nesta tela"
+                    />
+                  </div>
+
+                  <div className="rounded-md border border-dashed border-border/70 bg-muted/40 px-3 py-2.5 text-sm">
+                    <p className="text-xs font-medium text-muted-foreground">Referência: limite no início do mês (estimado)</p>
+                    <p className="mt-1 text-base font-semibold tabular-nums text-foreground">{formatCurrency(estimatedAtMonthStart)}</p>
+                    <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                      Soma do disponível atual com as compras do mês nesta tela. O total &quot;usado&quot; do cartão já inclui o mês.
+                    </p>
                   </div>
                 </div>
               );
             })}
             {!allSufficient && (
               <p className="text-xs text-muted-foreground">
-                Uma ou mais fontes não têm saldo (ou limite) suficiente para as saídas previstas do mês.
+                Uma ou mais fontes estão com saldo insuficiente ou com limite de cartão estourado.
               </p>
             )}
           </CardContent>

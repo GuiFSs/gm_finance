@@ -15,6 +15,18 @@ export type SelectOption = {
   label: string;
 };
 
+/** Radix Select não aceita `value=""` em SelectItem; mapeamos para um token estável. */
+const EMPTY_VALUE_TOKEN = "__select_empty_value__";
+
+function toRadixValue(v: string | undefined | null): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  return v === "" ? EMPTY_VALUE_TOKEN : v;
+}
+
+function fromRadixValue(v: string): string {
+  return v === EMPTY_VALUE_TOKEN ? "" : v;
+}
+
 type SelectOptionsProps = Omit<
   React.ComponentPropsWithoutRef<typeof SelectTrigger>,
   "value" | "onChange"
@@ -35,19 +47,25 @@ export function SelectOptions({
 }: SelectOptionsProps) {
   const emptyOption = options.find((o) => o.value === "");
   const resolvedPlaceholder = emptyOption?.label ?? placeholder;
-  const selectOptions = options.filter((option) => option.value !== "");
+  const radixValue = toRadixValue(value);
 
   return (
-    <Select value={value || undefined} onValueChange={onValueChange}>
+    <Select
+      value={radixValue}
+      onValueChange={(v) => onValueChange?.(fromRadixValue(v))}
+    >
       <SelectTrigger className={className} {...props}>
         <SelectValue placeholder={resolvedPlaceholder} />
       </SelectTrigger>
       <SelectContent>
-        {selectOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
+        {options.map((option, index) => (
+          <SelectItem
+            key={option.value === "" ? `empty-${index}` : option.value}
+            value={option.value === "" ? EMPTY_VALUE_TOKEN : option.value}
+          >
+            {option.label}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );

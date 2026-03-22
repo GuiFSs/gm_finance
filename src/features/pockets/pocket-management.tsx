@@ -158,24 +158,28 @@ export function PocketManagement() {
   const onEditPocket = editForm.handleSubmit(async (values) => {
     if (!currentUser.data?.id || !editingPocket) return;
     const { name, description, newBalance } = values;
-    await updatePocket.mutateAsync({
-      id: editingPocket.id,
-      name,
-      description: description || null,
-    });
-    const balanceDelta = newBalance - editingPocket.balance;
-    if (Math.abs(balanceDelta) > 1e-6) {
-      await createAdjustment.mutateAsync({
-        targetType: "pocket",
-        targetId: editingPocket.id,
-        amount: balanceDelta,
-        reason: "Ajuste de saldo (edição)",
-        adjustmentDate: toInputDate(new Date()),
-        createdByUserId: currentUser.data.id,
+    try {
+      await updatePocket.mutateAsync({
+        id: editingPocket.id,
+        name,
+        description: description || null,
       });
+      const balanceDelta = newBalance - editingPocket.balance;
+      if (Math.abs(balanceDelta) > 1e-6) {
+        await createAdjustment.mutateAsync({
+          targetType: "pocket",
+          targetId: editingPocket.id,
+          amount: balanceDelta,
+          reason: "Ajuste de saldo (edição)",
+          adjustmentDate: toInputDate(new Date()),
+          createdByUserId: currentUser.data.id,
+        });
+      }
+      toast.success("Caixinha atualizada");
+      setEditingPocket(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar a caixinha.");
     }
-    toast.success("Caixinha atualizada");
-    setEditingPocket(null);
   });
 
   return (

@@ -228,6 +228,7 @@ export function PurchaseList() {
         size="2xl"
       >
         <PurchaseForm
+          key={editPurchaseId ?? "new-purchase"}
           purchaseId={editPurchaseId}
           onSuccess={() => {
             setOpenPurchaseModal(false);

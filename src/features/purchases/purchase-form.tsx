@@ -5,12 +5,13 @@ import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import {
   useCreatePurchase,
+  useCreateTag,
   useCurrentUser,
   useCategories,
   useCreateCategory,
@@ -43,6 +44,35 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+
+async function resolveTagIdsForSubmit(
+  raw: string,
+  existingTags: Array<{ id: string; name: string }>,
+  createTag: { mutateAsync: (input: Record<string, unknown>) => Promise<unknown> },
+  userId: string
+): Promise<string[]> {
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (names.length === 0) return [];
+  let byLower = new Map(existingTags.map((t) => [t.name.toLowerCase(), t.id]));
+  const ids: string[] = [];
+  for (const name of names) {
+    const key = name.toLowerCase();
+    let id = byLower.get(key);
+    if (!id) {
+      const res = (await createTag.mutateAsync({
+        name,
+        createdByUserId: userId,
+      })) as { data: { id: string; name: string } };
+      id = res.data.id;
+      byLower = new Map(byLower).set(key, id);
+    }
+    ids.push(id);
+  }
+  return [...new Set(ids)];
+}
 
 function FormSection({
   title,
@@ -83,6 +113,7 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
   const currentUser = useCurrentUser();
   const categories = useCategories();
   const createCategory = useCreateCategory();
+  const createTag = useCreateTag();
   const tags = useTags();
   const pockets = usePockets();
   const cards = useCards();
@@ -92,39 +123,56 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
     resolver: zodResolver(schema),
     defaultValues: {
       title: "",
+      description: "",
+      amount: 0,
       purchaseDate: toInputDate(new Date()),
+      categoryId: "",
       paymentSourceType: "account",
+      paymentSourceId: "",
       installmentCount: 1,
       tagIds: [],
     },
   });
+
+  const { control, reset } = form;
 
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [tagsField, setTagsField] = useState("");
 
   useEffect(() => {
-    if (!purchaseId || !detail.data || !tags.data) return;
+    if (!purchaseId || !detail.data) return;
     const d = detail.data;
-    const byId = new Map(tags.data.map((t) => [t.id, t.name]));
+
+    const categoriesReady = categories.data !== undefined;
+    const pocketsReady = d.paymentSourceType !== "pocket" || pockets.data !== undefined;
+    const cardsReady = d.paymentSourceType !== "card" || cards.data !== undefined;
+    if (!categoriesReady || !pocketsReady || !cardsReady) return;
+
+    const byId = new Map((tags.data ?? []).map((t) => [t.id, t.name]));
     setTagsField(d.tagIds.map((id) => byId.get(id)).filter(Boolean).join(", "));
-    form.reset({
+
+    const paymentSourceIdValue =
+      d.paymentSourceType === "account" ? "" : (d.paymentSourceId ?? "");
+
+    reset({
       title: d.title,
       description: d.description ?? "",
       amount: d.totalAmount,
       purchaseDate: d.firstPurchaseDate,
       categoryId: d.categoryId ?? "",
       paymentSourceType: d.paymentSourceType as FormValues["paymentSourceType"],
-      paymentSourceId: d.paymentSourceId ?? "",
+      paymentSourceId: paymentSourceIdValue,
       installmentCount: d.installments[0]?.installmentCount ?? 1,
       tagIds: d.tagIds ?? [],
     });
-  }, [purchaseId, detail.data, tags.data, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset estável; evitar re-sync ao editar por mudança de ref
+  }, [purchaseId, detail.data, tags.data, categories.data, pockets.data, cards.data]);
 
   useEffect(() => {
     if (purchaseId) return;
     setTagsField("");
-    form.reset({
+    reset({
       title: "",
       description: "",
       amount: 0,
@@ -135,11 +183,12 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
       installmentCount: 1,
       tagIds: [],
     });
-  }, [purchaseId, form]);
+    // Só quando `purchaseId` é null (nova compra). Não incluir `reset` nas deps: referência instável pode limpar o form após o usuário preencher.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps intencionais
+  }, [purchaseId]);
 
   const paymentSourceType = useWatch({ control: form.control, name: "paymentSourceType" }) ?? "account";
   const paymentSourceId = useWatch({ control: form.control, name: "paymentSourceId" });
-  const categoryId = useWatch({ control: form.control, name: "categoryId" });
   const amount = useWatch({ control: form.control, name: "amount" }) ?? 0;
   const installmentCount = useWatch({ control: form.control, name: "installmentCount" }) ?? 1;
   const purchaseDateWatch = useWatch({ control: form.control, name: "purchaseDate" });
@@ -182,6 +231,10 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
       return;
     }
 
+    const categoryIdPayload = values.categoryId?.trim() ? values.categoryId.trim() : undefined;
+    const tagIdsPayload = await resolveTagIdsForSubmit(tagsField, tags.data ?? [], createTag, createdByUserId);
+    form.setValue("tagIds", tagIdsPayload);
+
     if (purchaseId) {
       await updatePurchase.mutateAsync({
         purchaseId,
@@ -189,15 +242,20 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
         description: values.description,
         amount: values.amount,
         purchaseDate: values.purchaseDate,
-        categoryId: values.categoryId || undefined,
+        categoryId: categoryIdPayload,
         paymentSourceType: values.paymentSourceType,
         paymentSourceId: values.paymentSourceId || undefined,
         installmentCount: values.installmentCount,
-        tagIds: values.tagIds,
+        tagIds: tagIdsPayload,
       });
       toast.success("Despesa atualizada");
     } else {
-      await createPurchase.mutateAsync({ ...values, createdByUserId });
+      await createPurchase.mutateAsync({
+        ...values,
+        categoryId: categoryIdPayload,
+        tagIds: tagIdsPayload,
+        createdByUserId,
+      });
       toast.success("Compra criada");
     }
     if (onSuccess) onSuccess();
@@ -219,7 +277,13 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
   const pocketWouldBeNegative =
     paymentSourceType === "pocket" && selectedPocket ? selectedPocket.balance - amountPerInstallment < 0 : false;
 
-  const isEditLoading = Boolean(purchaseId) && (detail.isLoading || !detail.data);
+  const isEditLoading =
+    Boolean(purchaseId) &&
+    (detail.isLoading ||
+      !detail.data ||
+      categories.isLoading ||
+      (detail.data?.paymentSourceType === "pocket" && pockets.isLoading) ||
+      (detail.data?.paymentSourceType === "card" && cards.isLoading));
   const isSaving = createPurchase.isPending || updatePurchase.isPending;
 
   const formContent = (
@@ -287,27 +351,45 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
               <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border/80 pt-4 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="paymentSourceType">Pagar com</Label>
-                  <SelectOptions
-                    id="paymentSourceType"
-                    value={paymentSourceType}
-                    onValueChange={(v) => {
-                      const type = v as FormValues["paymentSourceType"];
-                      form.setValue("paymentSourceType", type);
-                    }}
-                    options={[
-                      { value: "account", label: "Conta corrente" },
-                      { value: "pocket", label: "Caixinha" },
-                      { value: "card", label: "Cartão de crédito" },
-                    ]}
+                  <Controller
+                    name="paymentSourceType"
+                    control={control}
+                    render={({ field }) => (
+                      <SelectOptions
+                        key={`pay-type-${purchaseId ?? "new"}-${detail.dataUpdatedAt ?? 0}`}
+                        id="paymentSourceType"
+                        value={field.value}
+                        onValueChange={(v) => {
+                          const type = v as FormValues["paymentSourceType"];
+                          const prev = field.value;
+                          field.onChange(type);
+                          if (type !== prev) {
+                            form.setValue("paymentSourceId", type === "account" ? "" : undefined);
+                          }
+                        }}
+                        options={[
+                          { value: "account", label: "Conta corrente" },
+                          { value: "pocket", label: "Caixinha" },
+                          { value: "card", label: "Cartão de crédito" },
+                        ]}
+                      />
+                    )}
                   />
                 </div>
                 <div>
                   <Label htmlFor="paymentSourceId">Fonte</Label>
-                  <SelectOptions
-                    id="paymentSourceId"
-                    value={paymentSourceId ?? ""}
-                    onValueChange={(v) => form.setValue("paymentSourceId", v || undefined)}
-                    options={sourceOptions}
+                  <Controller
+                    name="paymentSourceId"
+                    control={control}
+                    render={({ field }) => (
+                      <SelectOptions
+                        key={`pay-src-${paymentSourceType}-${purchaseId ?? "new"}-${detail.dataUpdatedAt ?? 0}`}
+                        id="paymentSourceId"
+                        value={field.value ?? ""}
+                        onValueChange={(v) => field.onChange(v)}
+                        options={sourceOptions}
+                      />
+                    )}
                   />
                 </div>
                 <div>
@@ -355,14 +437,21 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
             <div className="space-y-3">
               <div>
                 <Label htmlFor="categoryId">Categoria</Label>
-                <SelectOptions
-                  id="categoryId"
-                  value={categoryId ?? ""}
-                  onValueChange={(v) => form.setValue("categoryId", v || undefined)}
-                  options={[
-                    { value: "", label: "Sem categoria" },
-                    ...(categories.data ?? []).map((item) => ({ value: item.id, label: item.name })),
-                  ]}
+                <Controller
+                  name="categoryId"
+                  control={control}
+                  render={({ field }) => (
+                    <SelectOptions
+                      key={`category-${purchaseId ?? "new"}-${detail.dataUpdatedAt ?? 0}-${(categories.data ?? []).length}`}
+                      id="categoryId"
+                      value={field.value ?? ""}
+                      onValueChange={(v) => field.onChange(v)}
+                      options={[
+                        { value: "", label: "Sem categoria" },
+                        ...(categories.data ?? []).map((item) => ({ value: item.id, label: item.name })),
+                      ]}
+                    />
+                  )}
                 />
               </div>
               {showCreateCategory ? (

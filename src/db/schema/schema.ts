@@ -94,6 +94,7 @@ export const recurringExpenses = sqliteTable("recurring_expenses", {
     enum: paymentSourceTypeEnum,
   }).notNull(),
   paymentSourceId: text("payment_source_id"),
+  categoryId: text("category_id").references(() => categories.id),
   createdByUserId: text("created_by_user_id")
     .notNull()
     .references(() => users.id),
@@ -101,6 +102,15 @@ export const recurringExpenses = sqliteTable("recurring_expenses", {
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
+});
+
+export const recurringExpenseTags = sqliteTable("recurring_expense_tags", {
+  recurringExpenseId: text("recurring_expense_id")
+    .notNull()
+    .references(() => recurringExpenses.id, { onDelete: "cascade" }),
+  tagId: text("tag_id")
+    .notNull()
+    .references(() => tags.id, { onDelete: "cascade" }),
 });
 
 export const purchases = sqliteTable("purchases", {

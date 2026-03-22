@@ -11,12 +11,15 @@ import {
   useCreateDeposit,
   useCreateRecurringDeposit,
   useCurrentUser,
+  useDeleteDeposit,
   useDeleteRecurringDeposit,
   useDeposits,
   usePockets,
+  type DepositRow,
   type RecurringDepositRow,
   useRecurringDeposits,
   useRunRecurring,
+  useUpdateDeposit,
   useUpdateRecurringDeposit,
 } from "@/shared/hooks/use-app-data";
 import { DEPOSIT_SUM_EPS, PERCENT_SUM_EPS, amountsToPercents, distributeAmountsByPercent } from "@/shared/lib/deposit-split";
@@ -106,6 +109,8 @@ export function DepositManagement() {
   const recurring = useRecurringDeposits();
   const pockets = usePockets();
   const createDeposit = useCreateDeposit();
+  const updateDeposit = useUpdateDeposit();
+  const deleteDeposit = useDeleteDeposit();
   const createRecurring = useCreateRecurringDeposit();
   const updateRecurring = useUpdateRecurringDeposit();
   const deleteRecurring = useDeleteRecurringDeposit();
@@ -114,6 +119,8 @@ export function DepositManagement() {
 
   const [activeTab, setActiveTab] = useState<TabId>("manual");
   const [openCreate, setOpenCreate] = useState(false);
+  const [editingManualDeposit, setEditingManualDeposit] = useState<DepositRow | null>(null);
+  const [deletingManualDeposit, setDeletingManualDeposit] = useState<DepositRow | null>(null);
   const [openRecurringCreate, setOpenRecurringCreate] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringDepositRow | null>(null);
   const [deletingItem, setDeletingItem] = useState<RecurringDepositRow | null>(null);
@@ -145,6 +152,7 @@ export function DepositManagement() {
   const pocketOptions = (pockets.data ?? []).map((p) => ({ value: p.id, label: p.name }));
 
   const openManualModal = () => {
+    setEditingManualDeposit(null);
     manualForm.reset({
       title: "",
       amount: 0,
@@ -152,6 +160,31 @@ export function DepositManagement() {
     });
     setManualMode("amount");
     setManualRows(defaultManualRows(0));
+    setOpenCreate(true);
+  };
+
+  const openEditManualDeposit = (deposit: DepositRow) => {
+    setEditingManualDeposit(deposit);
+    manualForm.reset({
+      title: deposit.title,
+      amount: deposit.amount,
+      depositDate: deposit.depositDate,
+    });
+    setManualMode("amount");
+    if (deposit.splits.length > 0) {
+      setManualRows(
+        deposit.splits.map((s) =>
+          newSplitRow({
+            targetType: s.targetType,
+            pocketId: s.pocketId ?? "",
+            amount: s.amount,
+            percent: deposit.amount > 0 ? (s.amount / deposit.amount) * 100 : 0,
+          })
+        )
+      );
+    } else {
+      setManualRows(defaultManualRows(deposit.amount));
+    }
     setOpenCreate(true);
   };
 
@@ -191,19 +224,42 @@ export function DepositManagement() {
     if (!currentUser.data?.id) return;
     try {
       const splits = buildManualSplits(values.amount);
-      await createDeposit.mutateAsync({
-        title: values.title,
-        amount: values.amount,
-        depositDate: values.depositDate,
-        createdByUserId: currentUser.data.id,
-        splits,
-      });
-      toast.success("Depósito registrado");
+      if (editingManualDeposit) {
+        await updateDeposit.mutateAsync({
+          id: editingManualDeposit.id,
+          title: values.title,
+          amount: values.amount,
+          depositDate: values.depositDate,
+          splits,
+        });
+        toast.success("Depósito atualizado");
+      } else {
+        await createDeposit.mutateAsync({
+          title: values.title,
+          amount: values.amount,
+          depositDate: values.depositDate,
+          createdByUserId: currentUser.data.id,
+          splits,
+        });
+        toast.success("Depósito registrado");
+      }
       setOpenCreate(false);
+      setEditingManualDeposit(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível salvar.");
     }
   });
+
+  const onConfirmDeleteManual = async () => {
+    if (!deletingManualDeposit) return;
+    try {
+      await deleteDeposit.mutateAsync(deletingManualDeposit.id);
+      toast.success("Depósito excluído");
+      setDeletingManualDeposit(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível excluir.");
+    }
+  };
 
   const buildRecurringPercents = (total: number): { targetType: "account" | "pocket"; pocketId?: string; percent: number }[] => {
     for (const r of recurringRows) {
@@ -386,7 +442,15 @@ export function DepositManagement() {
           </div>
         </div>
 
-        <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Novo depósito" size="lg">
+        <Modal
+          open={openCreate}
+          onClose={() => {
+            setOpenCreate(false);
+            setEditingManualDeposit(null);
+          }}
+          title={editingManualDeposit ? "Editar depósito" : "Novo depósito"}
+          size="lg"
+        >
           <form onSubmit={onManualSubmit} className="space-y-4">
             <div>
               <Label htmlFor="dep-title">Título</Label>
@@ -562,14 +626,51 @@ export function DepositManagement() {
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setOpenCreate(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setOpenCreate(false);
+                  setEditingManualDeposit(null);
+                }}
+              >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={createDeposit.isPending}>
-                {createDeposit.isPending ? "Salvando..." : "Salvar"}
+              <Button type="submit" disabled={createDeposit.isPending || updateDeposit.isPending}>
+                {createDeposit.isPending || updateDeposit.isPending ? "Salvando..." : "Salvar"}
               </Button>
             </div>
           </form>
+        </Modal>
+
+        <Modal
+          open={!!deletingManualDeposit}
+          onClose={() => setDeletingManualDeposit(null)}
+          title="Excluir depósito"
+          size="sm"
+        >
+          <div className="space-y-4">
+            {deletingManualDeposit && (
+              <p className="text-sm text-muted-foreground">
+                Tem certeza que deseja excluir <strong className="text-foreground">{deletingManualDeposit.title}</strong>{" "}
+                ({formatCurrency(deletingManualDeposit.amount)})? O saldo da conta e das caixinhas será revertido conforme
+                este lançamento.
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeletingManualDeposit(null)}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={onConfirmDeleteManual}
+                disabled={deleteDeposit.isPending}
+              >
+                {deleteDeposit.isPending ? "Excluindo..." : "Excluir"}
+              </Button>
+            </div>
+          </div>
         </Modal>
 
         <Modal
@@ -948,8 +1049,8 @@ export function DepositManagement() {
                     <li key={deposit.id}>
                       <Card className="overflow-hidden transition-colors hover:bg-muted/30">
                         <CardContent className="p-4">
-                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0 flex-1">
                               <p className="font-semibold text-foreground">{deposit.title}</p>
                               <p className="text-sm text-muted-foreground">
                                 {formatDisplayDate(deposit.depositDate)} · {dest}
@@ -958,9 +1059,33 @@ export function DepositManagement() {
                                 )}
                               </p>
                             </div>
-                            <p className="text-lg font-semibold tabular-nums text-foreground">
-                              {formatCurrency(deposit.amount)}
-                            </p>
+                            <div className="flex shrink-0 items-center gap-3">
+                              <p className="text-lg font-semibold tabular-nums text-foreground">
+                                {formatCurrency(deposit.amount)}
+                              </p>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => openEditManualDeposit(deposit)}
+                                  aria-label="Editar depósito"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => setDeletingManualDeposit(deposit)}
+                                  aria-label="Excluir depósito"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

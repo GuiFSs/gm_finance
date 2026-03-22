@@ -9,13 +9,17 @@ import { z } from "zod";
 
 import {
   useCards,
+  useCategories,
   useCreateRecurring,
+  useCreateTag,
   useCurrentUser,
   useDeleteRecurring,
   usePockets,
   useRecurring,
   useRunRecurring,
+  useTags,
   useUpdateRecurring,
+  type RecurringRow,
 } from "@/shared/hooks/use-app-data";
 import { toInputDate, formatCurrency, formatDisplayDate } from "@/shared/utils/formatters";
 import { Button } from "@/shared/ui/button";
@@ -33,24 +37,45 @@ const PAYMENT_LABEL: Record<string, string> = {
   card: "Cartão de crédito",
 };
 
+async function resolveRecurringTagIds(
+  raw: string,
+  existing: Array<{ id: string; name: string }>,
+  createTag: { mutateAsync: (input: Record<string, unknown>) => Promise<unknown> },
+  userId: string
+): Promise<string[]> {
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (names.length === 0) return [];
+  const byLower = new Map(existing.map((t) => [t.name.toLowerCase(), t.id]));
+  const ids: string[] = [];
+  for (const name of names) {
+    const key = name.toLowerCase();
+    let id = byLower.get(key);
+    if (!id) {
+      const res = (await createTag.mutateAsync({
+        name,
+        createdByUserId: userId,
+      })) as { data: { id: string; name: string } };
+      id = res.data.id;
+      byLower.set(key, id);
+    }
+    ids.push(id);
+  }
+  return [...new Set(ids)];
+}
+
 const schema = z.object({
   title: z.string().min(1),
   amount: z.number().positive(),
   nextExecutionDate: z.string().min(1),
   paymentSourceType: z.enum(["account", "pocket", "card"]),
   paymentSourceId: z.string().optional(),
+  categoryId: z.string().optional(),
 });
 
 type TabId = "all" | "upcoming";
-
-type RecurringItem = {
-  id: string;
-  title: string;
-  amount: number;
-  nextExecutionDate: string;
-  paymentSourceType: string;
-  paymentSourceId?: string | null;
-};
 
 export function RecurringManagement() {
   const currentUser = useCurrentUser();
@@ -61,11 +86,15 @@ export function RecurringManagement() {
   const runRecurring = useRunRecurring();
   const pockets = usePockets();
   const cards = useCards();
+  const categories = useCategories();
+  const tags = useTags();
+  const createTag = useCreateTag();
 
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [openCreate, setOpenCreate] = useState(false);
-  const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
-  const [deletingItem, setDeletingItem] = useState<RecurringItem | null>(null);
+  const [editingItem, setEditingItem] = useState<RecurringRow | null>(null);
+  const [deletingItem, setDeletingItem] = useState<RecurringRow | null>(null);
+  const [tagsField, setTagsField] = useState("");
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -74,6 +103,7 @@ export function RecurringManagement() {
       amount: 0,
       nextExecutionDate: toInputDate(new Date()),
       paymentSourceType: "account",
+      categoryId: "",
     },
   });
 
@@ -86,31 +116,54 @@ export function RecurringManagement() {
         ? (cards.data ?? []).map((item) => ({ value: item.id, label: item.name }))
         : [{ value: "", label: "Conta corrente" }];
 
+  const categoryOptions = [
+    { value: "", label: "Sem categoria" },
+    ...(categories.data ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ];
+
+  const openCreateModal = () => {
+    setTagsField("");
+    setOpenCreate(true);
+  };
+
   const onSubmit = form.handleSubmit(async (values) => {
     if (!currentUser.data?.id) return;
+    const tagIds = await resolveRecurringTagIds(tagsField, tags.data ?? [], createTag, currentUser.data.id);
     await createRecurring.mutateAsync({
       ...values,
       recurrenceType: "monthly",
       createdByUserId: currentUser.data.id,
+      categoryId: values.categoryId?.trim() || undefined,
+      tagIds,
     });
     toast.success("Despesa recorrente criada");
-    form.reset({ ...values, title: "", amount: 0 });
+    form.reset({
+      title: "",
+      amount: 0,
+      nextExecutionDate: toInputDate(new Date()),
+      paymentSourceType: "account",
+      categoryId: "",
+    });
+    setTagsField("");
     setOpenCreate(false);
   });
 
-  const openEdit = (item: RecurringItem) => {
+  const openEdit = (item: RecurringRow) => {
     setEditingItem(item);
+    setTagsField(item.tags.map((t) => t.name).join(", "));
     form.reset({
       title: item.title,
       amount: item.amount,
       nextExecutionDate: item.nextExecutionDate,
       paymentSourceType: item.paymentSourceType as "account" | "pocket" | "card",
       paymentSourceId: item.paymentSourceId ?? undefined,
+      categoryId: item.categoryId ?? "",
     });
   };
 
   const onEditSubmit = form.handleSubmit(async (values) => {
-    if (!editingItem) return;
+    if (!editingItem || !currentUser.data?.id) return;
+    const tagIds = await resolveRecurringTagIds(tagsField, tags.data ?? [], createTag, currentUser.data.id);
     await updateRecurring.mutateAsync({
       id: editingItem.id,
       title: values.title,
@@ -118,8 +171,11 @@ export function RecurringManagement() {
       nextExecutionDate: values.nextExecutionDate,
       paymentSourceType: values.paymentSourceType,
       paymentSourceId: values.paymentSourceId || undefined,
+      categoryId: values.categoryId?.trim() || undefined,
+      tagIds,
     });
     toast.success("Despesa recorrente atualizada");
+    setTagsField("");
     setEditingItem(null);
   });
 
@@ -170,14 +226,22 @@ export function RecurringManagement() {
             </button>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Button onClick={() => setOpenCreate(true)}>Nova despesa recorrente</Button>
+            <Button onClick={openCreateModal}>Nova despesa recorrente</Button>
             <Button variant="outline" onClick={onRun} disabled={runRecurring.isPending}>
               {runRecurring.isPending ? "Executando..." : "Executar agora"}
             </Button>
           </div>
         </div>
 
-        <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Nova despesa recorrente" size="md">
+        <Modal
+          open={openCreate}
+          onClose={() => {
+            setOpenCreate(false);
+            setTagsField("");
+          }}
+          title="Nova despesa recorrente"
+          size="lg"
+        >
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
               <Label htmlFor="recurring-title">Título</Label>
@@ -218,8 +282,35 @@ export function RecurringManagement() {
                 />
               </div>
             </div>
+            <div>
+              <Label>Categoria</Label>
+              <SelectOptions
+                value={form.watch("categoryId") ?? ""}
+                onValueChange={(v) => form.setValue("categoryId", v || undefined)}
+                options={categoryOptions}
+              />
+            </div>
+            <div>
+              <Label htmlFor="recurring-tags">Tags</Label>
+              <Input
+                id="recurring-tags"
+                placeholder="Ex: mercado, mensal"
+                value={tagsField}
+                onChange={(e) => setTagsField(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nomes de tags já cadastradas ou novas, separados por vírgula (iguais à despesa normal).
+              </p>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setOpenCreate(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setOpenCreate(false);
+                  setTagsField("");
+                }}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={createRecurring.isPending}>
@@ -231,9 +322,12 @@ export function RecurringManagement() {
 
         <Modal
           open={!!editingItem}
-          onClose={() => setEditingItem(null)}
+          onClose={() => {
+            setEditingItem(null);
+            setTagsField("");
+          }}
           title="Editar despesa recorrente"
-          size="md"
+          size="lg"
         >
           <form onSubmit={onEditSubmit} className="space-y-4">
             <div>
@@ -275,8 +369,35 @@ export function RecurringManagement() {
                 />
               </div>
             </div>
+            <div>
+              <Label>Categoria</Label>
+              <SelectOptions
+                value={form.watch("categoryId") ?? ""}
+                onValueChange={(v) => form.setValue("categoryId", v || undefined)}
+                options={categoryOptions}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-recurring-tags">Tags</Label>
+              <Input
+                id="edit-recurring-tags"
+                placeholder="Ex: mercado, mensal"
+                value={tagsField}
+                onChange={(e) => setTagsField(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nomes de tags já cadastradas ou novas, separados por vírgula (iguais à despesa normal).
+              </p>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setEditingItem(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingItem(null);
+                  setTagsField("");
+                }}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={updateRecurring.isPending}>
@@ -341,7 +462,7 @@ export function RecurringManagement() {
               <p className="text-sm text-muted-foreground">
                 Crie uma para despesas que se repetem todo mês (aluguel, assinaturas, etc.).
               </p>
-              <Button onClick={() => setOpenCreate(true)}>Nova despesa recorrente</Button>
+              <Button onClick={openCreateModal}>Nova despesa recorrente</Button>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -356,6 +477,18 @@ export function RecurringManagement() {
                             Próxima execução: {formatDisplayDate(item.nextExecutionDate)}
                             <span className="mx-1.5">·</span>
                             <span>{PAYMENT_LABEL[item.paymentSourceType] ?? item.paymentSourceType}</span>
+                            {item.categoryName && (
+                              <>
+                                <span className="mx-1.5">·</span>
+                                <span>{item.categoryName}</span>
+                              </>
+                            )}
+                            {item.tags.length > 0 && (
+                              <>
+                                <span className="mx-1.5">·</span>
+                                <span>{item.tags.map((t) => `#${t.name}`).join(" ")}</span>
+                              </>
+                            )}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-3">

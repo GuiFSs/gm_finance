@@ -1,10 +1,19 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { addMonths, endOfMonth, format, getDate, parseISO, startOfMonth } from "date-fns";
 
 import { db, schema } from "@/db";
 import type { PaymentSourceType } from "@/shared/types/domain";
 import { DEPOSIT_SUM_EPS, distributeAmountsByPercent } from "@/shared/lib/deposit-split";
 import { formatCurrency } from "@/shared/utils/formatters";
+
+/**
+ * Data de referência do servidor (yyyy-MM-dd) para decidir se débitos de **compra** já “venceram”.
+ * Depósitos, ajustes e transferências entram no saldo na data do lançamento; só parcelas de compra
+ * ficam de fora até `occurredAt` ≤ este dia (evita timezone que escondia depósitos de hoje).
+ */
+export function ledgerBalanceCutoffDate(): string {
+  return format(new Date(), "yyyy-MM-dd");
+}
 
 export type DepositSplitInput = {
   targetType: "account" | "pocket";
@@ -39,17 +48,23 @@ export async function seedInitialUsers() {
 }
 
 export async function getCheckingBalance() {
-  const result = await db.select({ total: sql<number>`coalesce(sum(${schema.accountEntries.amount}), 0)` }).from(schema.accountEntries);
+  const cutoff = ledgerBalanceCutoffDate();
+  const result = await db
+    .select({
+      total: sql<number>`coalesce(sum(case when ${schema.accountEntries.referenceType} = 'purchase' and ${schema.accountEntries.occurredAt} > ${cutoff} then 0 else ${schema.accountEntries.amount} end), 0)`,
+    })
+    .from(schema.accountEntries);
   return result[0]?.total ?? 0;
 }
 
 export async function getPocketBalances() {
+  const cutoff = ledgerBalanceCutoffDate();
   const rows = await db
     .select({
       id: schema.pockets.id,
       name: schema.pockets.name,
       description: schema.pockets.description,
-      balance: sql<number>`coalesce(sum(${schema.pocketEntries.amount}), 0)`,
+      balance: sql<number>`coalesce(sum(case when ${schema.pocketEntries.referenceType} = 'purchase' and ${schema.pocketEntries.occurredAt} > ${cutoff} then 0 else ${schema.pocketEntries.amount} end), 0)`,
     })
     .from(schema.pockets)
     .leftJoin(schema.pocketEntries, eq(schema.pocketEntries.pocketId, schema.pockets.id))
@@ -65,7 +80,7 @@ export async function getTotalBalance() {
   return checking + pocketTotal;
 }
 
-type DbExecutor = Pick<typeof db, "insert" | "delete" | "select">;
+type DbExecutor = Pick<typeof db, "insert" | "delete" | "select" | "update">;
 
 async function insertPurchaseWithLedger(executor: DbExecutor, input: PurchaseInput) {
   const installments = Math.max(1, input.installmentCount);
@@ -169,12 +184,8 @@ export async function updatePurchaseGroup(purchaseId: string, userId: string, in
   return true;
 }
 
-export async function createDeposit(input: {
-  title: string;
+function assertValidDepositSplits(input: {
   amount: number;
-  depositDate: string;
-  createdByUserId: string;
-  recurringDepositId?: string;
   splits: DepositSplitInput[];
 }) {
   if (input.splits.length === 0) {
@@ -189,6 +200,68 @@ export async function createDeposit(input: {
       throw new Error("Selecione a caixinha em cada parte que vai para caixinha.");
     }
   }
+}
+
+async function removeDepositLedgerEntries(executor: DbExecutor, depositId: string) {
+  await executor.delete(schema.accountEntries).where(
+    and(eq(schema.accountEntries.referenceType, "deposit"), eq(schema.accountEntries.referenceId, depositId)),
+  );
+  await executor.delete(schema.pocketEntries).where(
+    and(eq(schema.pocketEntries.referenceType, "deposit"), eq(schema.pocketEntries.referenceId, depositId)),
+  );
+}
+
+async function insertDepositSplitsAndLedger(
+  executor: DbExecutor,
+  depositId: string,
+  input: { splits: DepositSplitInput[]; depositDate: string; createdByUserId: string },
+) {
+  for (let i = 0; i < input.splits.length; i++) {
+    const s = input.splits[i]!;
+    const amt = Math.abs(s.amount);
+    await executor.insert(schema.depositSplits).values({
+      id: crypto.randomUUID(),
+      depositId,
+      targetType: s.targetType,
+      pocketId: s.targetType === "pocket" ? s.pocketId ?? null : null,
+      amount: amt,
+      sortOrder: i,
+    });
+
+    if (s.targetType === "account") {
+      await executor.insert(schema.accountEntries).values({
+        id: crypto.randomUUID(),
+        amount: amt,
+        entryType: "deposit",
+        referenceType: "deposit",
+        referenceId: depositId,
+        createdByUserId: input.createdByUserId,
+        occurredAt: input.depositDate,
+      });
+    } else if (s.pocketId) {
+      await executor.insert(schema.pocketEntries).values({
+        id: crypto.randomUUID(),
+        pocketId: s.pocketId,
+        amount: amt,
+        entryType: "deposit",
+        referenceType: "deposit",
+        referenceId: depositId,
+        createdByUserId: input.createdByUserId,
+        occurredAt: input.depositDate,
+      });
+    }
+  }
+}
+
+export async function createDeposit(input: {
+  title: string;
+  amount: number;
+  depositDate: string;
+  createdByUserId: string;
+  recurringDepositId?: string;
+  splits: DepositSplitInput[];
+}) {
+  assertValidDepositSplits(input);
 
   const depositId = crypto.randomUUID();
   const first = input.splits[0]!;
@@ -203,41 +276,52 @@ export async function createDeposit(input: {
     recurringDepositId: input.recurringDepositId ?? null,
   });
 
-  for (let i = 0; i < input.splits.length; i++) {
-    const s = input.splits[i]!;
-    const amt = Math.abs(s.amount);
-    await db.insert(schema.depositSplits).values({
-      id: crypto.randomUUID(),
-      depositId,
-      targetType: s.targetType,
-      pocketId: s.targetType === "pocket" ? s.pocketId ?? null : null,
-      amount: amt,
-      sortOrder: i,
-    });
+  await insertDepositSplitsAndLedger(db, depositId, {
+    splits: input.splits,
+    depositDate: input.depositDate,
+    createdByUserId: input.createdByUserId,
+  });
+}
 
-    if (s.targetType === "account") {
-      await db.insert(schema.accountEntries).values({
-        id: crypto.randomUUID(),
-        amount: amt,
-        entryType: "deposit",
-        referenceType: "deposit",
-        referenceId: depositId,
-        createdByUserId: input.createdByUserId,
-        occurredAt: input.depositDate,
-      });
-    } else if (s.pocketId) {
-      await db.insert(schema.pocketEntries).values({
-        id: crypto.randomUUID(),
-        pocketId: s.pocketId,
-        amount: amt,
-        entryType: "deposit",
-        referenceType: "deposit",
-        referenceId: depositId,
-        createdByUserId: input.createdByUserId,
-        occurredAt: input.depositDate,
-      });
-    }
-  }
+export async function updateDeposit(
+  depositId: string,
+  input: {
+    title: string;
+    amount: number;
+    depositDate: string;
+    createdByUserId: string;
+    splits: DepositSplitInput[];
+  },
+) {
+  assertValidDepositSplits(input);
+
+  const first = input.splits[0]!;
+  await db.transaction(async (tx) => {
+    await removeDepositLedgerEntries(tx, depositId);
+    await tx.delete(schema.depositSplits).where(eq(schema.depositSplits.depositId, depositId));
+    await tx
+      .update(schema.deposits)
+      .set({
+        title: input.title,
+        amount: input.amount,
+        depositDate: input.depositDate,
+        targetType: first.targetType,
+        pocketId: first.targetType === "pocket" ? first.pocketId ?? null : null,
+      })
+      .where(eq(schema.deposits.id, depositId));
+    await insertDepositSplitsAndLedger(tx, depositId, {
+      splits: input.splits,
+      depositDate: input.depositDate,
+      createdByUserId: input.createdByUserId,
+    });
+  });
+}
+
+export async function deleteDeposit(depositId: string) {
+  await db.transaction(async (tx) => {
+    await removeDepositLedgerEntries(tx, depositId);
+    await tx.delete(schema.deposits).where(eq(schema.deposits.id, depositId));
+  });
 }
 
 export async function createTransfer(input: {
@@ -300,6 +384,25 @@ export async function runRecurringExpenses() {
     .from(schema.recurringExpenses)
     .where(and(eq(schema.recurringExpenses.isActive, true), lte(schema.recurringExpenses.nextExecutionDate, today)));
 
+  const recurringIds = recurringRows.map((r) => r.id);
+  const tagLinkRows =
+    recurringIds.length > 0
+      ? await db
+          .select({
+            recurringId: schema.recurringExpenseTags.recurringExpenseId,
+            tagId: schema.recurringExpenseTags.tagId,
+          })
+          .from(schema.recurringExpenseTags)
+          .where(inArray(schema.recurringExpenseTags.recurringExpenseId, recurringIds))
+      : [];
+
+  const tagIdsByRecurring = new Map<string, string[]>();
+  for (const row of tagLinkRows) {
+    const list = tagIdsByRecurring.get(row.recurringId) ?? [];
+    list.push(row.tagId);
+    tagIdsByRecurring.set(row.recurringId, list);
+  }
+
   for (const recurring of recurringRows) {
     await createPurchase({
       title: recurring.title,
@@ -308,9 +411,10 @@ export async function runRecurringExpenses() {
       createdByUserId: recurring.createdByUserId,
       paymentSourceType: recurring.paymentSourceType,
       paymentSourceId: recurring.paymentSourceId ?? undefined,
+      categoryId: recurring.categoryId ?? undefined,
       installmentCount: 1,
       recurringOriginId: recurring.id,
-      tagIds: [],
+      tagIds: tagIdsByRecurring.get(recurring.id) ?? [],
     });
 
     await db
@@ -632,9 +736,13 @@ export async function getDashboardData() {
 }
 
 async function buildBalanceEvolution() {
+  const cutoff = ledgerBalanceCutoffDate();
   const accountRows = await db
     .select({ date: schema.accountEntries.occurredAt, amount: schema.accountEntries.amount })
     .from(schema.accountEntries)
+    .where(
+      or(ne(schema.accountEntries.referenceType, "purchase"), lte(schema.accountEntries.occurredAt, cutoff)),
+    )
     .orderBy(asc(schema.accountEntries.occurredAt));
 
   const map = new Map<string, number>();
@@ -1038,7 +1146,12 @@ export function computeSourcesSummary(
         creditLimit: c.creditLimit,
         used: c.used,
         outflows: out,
-        sufficient: available >= out,
+        /**
+         * `used` no sistema já soma todas as compras no cartão (incluindo o mês).
+         * Limite disponível = L - used já está "depois" dessas compras.
+         * Não usar `available >= out` (subtrai o mês duas vezes). Basta não estourar o limite.
+         */
+        sufficient: available >= 0,
       });
     }
   }

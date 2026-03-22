@@ -31,8 +31,12 @@ export function parseBRLFromInput(str: string): number {
   return isNegative ? -value : value;
 }
 
+/** yyyy-MM-dd no fuso local (igual a `<input type="date">`), não UTC — evita “pular” o dia perto da meia-noite. */
 export function toInputDate(value: Date) {
-  return value.toISOString().split("T")[0] ?? "";
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, "0");
+  const d = String(value.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /** Formata data ISO (yyyy-MM-dd) para exibição pt-BR: dd/MM/yyyy */

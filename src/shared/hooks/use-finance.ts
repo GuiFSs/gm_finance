@@ -272,7 +272,16 @@ export function useCreateRecurring() {
 export function useUpdateRecurring() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { id: string; title: string; amount: number; nextExecutionDate: string; paymentSourceType: string; paymentSourceId?: string }) =>
+    mutationFn: (payload: {
+      id: string;
+      title: string;
+      amount: number;
+      nextExecutionDate: string;
+      paymentSourceType: string;
+      paymentSourceId?: string;
+      categoryId?: string;
+      tagIds?: string[];
+    }) =>
       fetcher(`/api/recurring/${payload.id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -281,6 +290,8 @@ export function useUpdateRecurring() {
           nextExecutionDate: payload.nextExecutionDate,
           paymentSourceType: payload.paymentSourceType,
           paymentSourceId: payload.paymentSourceId || undefined,
+          categoryId: payload.categoryId || undefined,
+          tagIds: payload.tagIds ?? [],
         }),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recurring"] }),
@@ -347,6 +358,44 @@ export function useCreateDeposit() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
       queryClient.invalidateQueries({ queryKey: ["pockets"] });
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useUpdateDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown> & { id: string }) =>
+      fetcher(`/api/deposits/${payload.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: payload.title,
+          amount: payload.amount,
+          depositDate: payload.depositDate,
+          splits: payload.splits,
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useDeleteDeposit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetcher(`/api/deposits/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deposits"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 }
@@ -438,12 +487,16 @@ type CardRow = {
   dueDay: number;
   usedLimit: number;
 };
-type RecurringRow = {
+export type RecurringRow = {
   id: string;
   title: string;
   amount: number;
   nextExecutionDate: string;
   paymentSourceType: string;
+  paymentSourceId: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  tags: Array<{ id: string; name: string }>;
 };
 type GoalRow = {
   id: string;
@@ -463,7 +516,7 @@ export type DepositSplitRow = {
   sortOrder: number;
 };
 
-type DepositRow = {
+export type DepositRow = {
   id: string;
   title: string;
   amount: number;

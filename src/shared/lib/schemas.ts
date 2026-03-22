@@ -94,6 +94,8 @@ export const createRecurringSchema = z.object({
   nextExecutionDate: z.string().min(1),
   paymentSourceType: z.enum(["account", "pocket", "card"]),
   paymentSourceId: z.string().optional(),
+  categoryId: z.string().optional(),
+  tagIds: z.array(z.string()).optional(),
   createdByUserId: z.string().min(1),
 });
 
@@ -103,6 +105,8 @@ export const updateRecurringSchema = z.object({
   nextExecutionDate: z.string().min(1),
   paymentSourceType: z.enum(["account", "pocket", "card"]),
   paymentSourceId: z.string().optional(),
+  categoryId: z.string().optional(),
+  tagIds: z.array(z.string()).optional(),
 });
 
 export const createGoalSchema = z.object({
@@ -125,6 +129,33 @@ export const createDepositSchema = z
     amount: z.coerce.number().positive(),
     depositDate: z.string().min(1),
     createdByUserId: z.string().min(1),
+    splits: z.array(depositSplitInputSchema).min(1),
+  })
+  .superRefine((data, ctx) => {
+    const sum = data.splits.reduce((a, s) => a + s.amount, 0);
+    if (Math.abs(sum - data.amount) > 0.02) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A soma das partes deve ser igual ao valor total.",
+        path: ["splits"],
+      });
+    }
+    data.splits.forEach((s, i) => {
+      if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecione a caixinha",
+          path: ["splits", i, "pocketId"],
+        });
+      }
+    });
+  });
+
+export const updateDepositSchema = z
+  .object({
+    title: z.string().min(1),
+    amount: z.coerce.number().positive(),
+    depositDate: z.string().min(1),
     splits: z.array(depositSplitInputSchema).min(1),
   })
   .superRefine((data, ctx) => {
