@@ -49,10 +49,12 @@ export function GoalManagement() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <CardTitle>Metas</CardTitle>
-          <Button onClick={() => setOpenCreate(true)}>Nova meta</Button>
+      <Card className="p-4 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <CardTitle className="text-lg sm:text-xl">Metas</CardTitle>
+          <Button className="w-full sm:w-auto" onClick={() => setOpenCreate(true)}>
+            Nova meta
+          </Button>
         </div>
 
         <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Nova meta" size="md">
@@ -98,9 +100,9 @@ export function GoalManagement() {
             const progress = goal.targetAmount === 0 ? 0 : Math.min(100, (goal.progressAmount / goal.targetAmount) * 100);
             return (
               <div key={goal.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-700">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium dark:text-gray-100">{goal.title}</p>
-                  <p className="text-sm dark:text-gray-300">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <p className="min-w-0 font-medium dark:text-gray-100">{goal.title}</p>
+                  <p className="shrink-0 text-sm tabular-nums dark:text-gray-300">
                     {formatCurrency(goal.progressAmount)} / {formatCurrency(goal.targetAmount)}
                   </p>
                 </div>

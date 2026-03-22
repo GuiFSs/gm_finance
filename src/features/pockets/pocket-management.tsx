@@ -185,11 +185,14 @@ export function PocketManagement() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
-          <CardTitle>Caixinhas</CardTitle>
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => setOpenCreatePocket(true)}>Nova caixinha</Button>
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <CardTitle className="text-lg sm:text-xl">Caixinhas</CardTitle>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:gap-3">
+            <Button className="w-full sm:w-auto" onClick={() => setOpenCreatePocket(true)}>
+              Nova caixinha
+            </Button>
             <Button
+              className="w-full sm:w-auto"
               variant="outline"
               onClick={() => {
                 transferForm.reset({

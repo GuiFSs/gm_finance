@@ -389,12 +389,12 @@ export function DepositManagement() {
     <div className="space-y-6">
       <Card>
         <div className="flex flex-col gap-4 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex gap-1">
+          <div className="flex min-w-0 flex-wrap gap-1">
             <button
               type="button"
               onClick={() => setActiveTab("manual")}
               className={cn(
-                "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "rounded-md px-2.5 py-2 text-sm font-medium transition-colors sm:px-3",
                 activeTab === "manual"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -406,7 +406,7 @@ export function DepositManagement() {
               type="button"
               onClick={() => setActiveTab("recurring")}
               className={cn(
-                "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "rounded-md px-2.5 py-2 text-sm font-medium transition-colors sm:px-3",
                 activeTab === "recurring"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -415,12 +415,15 @@ export function DepositManagement() {
               Depósitos recorrentes
             </button>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             {activeTab === "manual" ? (
-              <Button onClick={openManualModal}>Novo depósito</Button>
+              <Button className="w-full sm:w-auto" onClick={openManualModal}>
+                Novo depósito
+              </Button>
             ) : (
               <>
                 <Button
+                  className="w-full sm:w-auto"
                   onClick={() => {
                     recurringForm.reset({
                       title: "",
@@ -434,7 +437,12 @@ export function DepositManagement() {
                 >
                   Novo depósito recorrente
                 </Button>
-                <Button variant="outline" onClick={onRunRecurring} disabled={runRecurring.isPending}>
+                <Button
+                  className="w-full sm:w-auto"
+                  variant="outline"
+                  onClick={onRunRecurring}
+                  disabled={runRecurring.isPending}
+                >
                   {runRecurring.isPending ? "Executando..." : "Executar agora"}
                 </Button>
               </>

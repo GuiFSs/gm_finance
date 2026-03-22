@@ -4,7 +4,7 @@ export default function RecurringPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl md:text-3xl">
           Despesas recorrentes
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">

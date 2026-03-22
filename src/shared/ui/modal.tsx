@@ -38,7 +38,7 @@ export function Modal({
 }: ModalProps) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={cn(sizeClasses[size], className)}>
+      <DialogContent className={cn(sizeClasses[size], "max-h-[90dvh]", className)}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

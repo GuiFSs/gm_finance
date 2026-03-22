@@ -199,12 +199,12 @@ export function RecurringManagement() {
       {/* Barra: abas + ações */}
       <Card>
         <div className="flex flex-col gap-4 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex gap-1">
+          <div className="flex min-w-0 flex-wrap gap-1">
             <button
               type="button"
               onClick={() => setActiveTab("all")}
               className={cn(
-                "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors sm:px-3",
                 activeTab === "all"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -216,7 +216,7 @@ export function RecurringManagement() {
               type="button"
               onClick={() => setActiveTab("upcoming")}
               className={cn(
-                "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors sm:px-3",
                 activeTab === "upcoming"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -225,9 +225,16 @@ export function RecurringManagement() {
               Próximos recorrentes
             </button>
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Button onClick={openCreateModal}>Nova despesa recorrente</Button>
-            <Button variant="outline" onClick={onRun} disabled={runRecurring.isPending}>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button className="w-full sm:w-auto" onClick={openCreateModal}>
+              Nova despesa recorrente
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              onClick={onRun}
+              disabled={runRecurring.isPending}
+            >
               {runRecurring.isPending ? "Executando..." : "Executar agora"}
             </Button>
           </div>

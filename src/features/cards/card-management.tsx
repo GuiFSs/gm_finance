@@ -92,7 +92,7 @@ export function CardManagement() {
         title="Cartões"
         description="Gerencie seus cartões de crédito e acompanhe o uso do limite."
         actions={
-          <Button onClick={() => setOpenCreate(true)}>
+          <Button className="w-full sm:w-auto" onClick={() => setOpenCreate(true)}>
             Adicionar cartão
           </Button>
         }
@@ -212,7 +212,7 @@ export function CardManagement() {
           <p className="mt-1 text-sm text-muted-foreground">
             Adicione seu primeiro cartão para acompanhar o limite e as faturas.
           </p>
-          <Button className="mt-6" onClick={() => setOpenCreate(true)}>
+          <Button className="mt-6 w-full max-w-xs sm:w-auto" onClick={() => setOpenCreate(true)}>
             Adicionar cartão
           </Button>
         </div>

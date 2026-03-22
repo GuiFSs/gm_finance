@@ -63,8 +63,8 @@ export function PurchaseDetailDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl gap-0 overflow-y-auto p-0">
-        <div className="border-b border-border px-6 py-5">
+      <DialogContent className="max-h-[90dvh] w-[calc(100vw-1rem)] max-w-2xl gap-0 overflow-y-auto p-0 sm:w-full">
+        <div className="border-b border-border px-4 py-4 sm:px-6 sm:py-5">
           <DialogHeader className="space-y-1 text-left">
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
@@ -72,7 +72,7 @@ export function PurchaseDetailDialog({
             </DialogDescription>
           </DialogHeader>
         </div>
-        <div className="space-y-5 px-6 py-5">
+        <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-5">
           {isLoading && (
             <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />

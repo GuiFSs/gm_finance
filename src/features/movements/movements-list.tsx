@@ -413,7 +413,7 @@ export function MovementsList() {
         <CardHeader className="pb-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base">Filtrar por mês</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full max-w-md items-center justify-center gap-2 sm:w-auto sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
@@ -425,7 +425,7 @@ export function MovementsList() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="min-w-40 text-center text-sm font-medium text-foreground">
+              <span className="min-w-0 flex-1 text-center text-sm font-medium text-foreground sm:min-w-[10rem] sm:flex-initial">
                 {formatYearMonthLabel(month)}
               </span>
               <Button
