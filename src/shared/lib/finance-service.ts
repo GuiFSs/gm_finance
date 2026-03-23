@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
-import { addMonths, endOfMonth, format, getDate, parseISO, startOfMonth } from "date-fns";
+import { addMonths, endOfMonth, format, getDate, startOfMonth } from "date-fns";
 
 import { db, schema } from "@/db";
 import type { PaymentSourceType } from "@/shared/types/domain";
 import { DEPOSIT_SUM_EPS, distributeAmountsByPercent } from "@/shared/lib/deposit-split";
-import { formatCurrency } from "@/shared/utils/formatters";
+import { formatCurrency, parseLocalDateYmd } from "@/shared/utils/formatters";
 
 /**
  * Data de referência do servidor (yyyy-MM-dd) para decidir se débitos de **compra** já “venceram”.
@@ -84,7 +84,7 @@ type DbExecutor = Pick<typeof db, "insert" | "delete" | "select" | "update">;
 
 async function insertPurchaseWithLedger(executor: DbExecutor, input: PurchaseInput) {
   const installments = Math.max(1, input.installmentCount);
-  const purchaseDate = new Date(input.purchaseDate);
+  const purchaseDate = parseLocalDateYmd(input.purchaseDate);
 
   const purchaseRows = Array.from({ length: installments }, (_, idx) => {
     const installmentDate = format(addMonths(purchaseDate, idx), "yyyy-MM-dd");
@@ -420,7 +420,7 @@ export async function runRecurringExpenses() {
     await db
       .update(schema.recurringExpenses)
       .set({
-        nextExecutionDate: format(addMonths(new Date(recurring.nextExecutionDate), 1), "yyyy-MM-dd"),
+        nextExecutionDate: format(addMonths(parseLocalDateYmd(recurring.nextExecutionDate), 1), "yyyy-MM-dd"),
       })
       .where(eq(schema.recurringExpenses.id, recurring.id));
   }
@@ -472,7 +472,7 @@ export async function runRecurringDeposits() {
     await db
       .update(schema.recurringDeposits)
       .set({
-        nextExecutionDate: format(addMonths(new Date(r.nextExecutionDate), 1), "yyyy-MM-dd"),
+        nextExecutionDate: format(addMonths(parseLocalDateYmd(r.nextExecutionDate), 1), "yyyy-MM-dd"),
       })
       .where(eq(schema.recurringDeposits.id, r.id));
   }
@@ -761,7 +761,7 @@ async function buildBalanceEvolution() {
 
 export type MonthMovement = {
   id: string;
-  type: "in" | "out" | "future_out";
+  type: "in" | "out" | "future_out" | "future_in";
   date: string;
   title: string;
   amount: number;
@@ -782,7 +782,7 @@ export type MonthMovement = {
 
 /** Mês de referência da fatura: compras no dia de fechamento em diante vão para o mês seguinte. */
 export function cardStatementMonth(purchaseDate: string, closingDay: number): string {
-  const d = parseISO(purchaseDate);
+  const d = parseLocalDateYmd(purchaseDate);
   const day = getDate(d);
   const anchor = day >= closingDay ? addMonths(d, 1) : d;
   return format(startOfMonth(anchor), "yyyy-MM");
@@ -819,6 +819,7 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       title: schema.deposits.title,
       amount: schema.deposits.amount,
       depositDate: schema.deposits.depositDate,
+      recurringDepositId: schema.deposits.recurringDepositId,
     })
     .from(schema.deposits)
     .where(and(gte(schema.deposits.depositDate, start), lte(schema.deposits.depositDate, end)));
@@ -866,6 +867,96 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       amount: d.amount,
       source,
       extra: parts && parts.length > 1 ? "Depósito (dividido)" : "Depósito",
+    });
+  }
+
+  const realizedRecurringDepositIds = new Set(
+    depositsInMonth.map((d) => d.recurringDepositId).filter((x): x is string => Boolean(x)),
+  );
+
+  const recurringDepositsDueInMonth = await db
+    .select({
+      id: schema.recurringDeposits.id,
+      title: schema.recurringDeposits.title,
+      amount: schema.recurringDeposits.amount,
+      nextExecutionDate: schema.recurringDeposits.nextExecutionDate,
+      targetType: schema.recurringDeposits.targetType,
+      pocketId: schema.recurringDeposits.pocketId,
+      pocketName: schema.pockets.name,
+    })
+    .from(schema.recurringDeposits)
+    .leftJoin(schema.pockets, eq(schema.pockets.id, schema.recurringDeposits.pocketId))
+    .where(
+      and(
+        eq(schema.recurringDeposits.isActive, true),
+        gte(schema.recurringDeposits.nextExecutionDate, start),
+        lte(schema.recurringDeposits.nextExecutionDate, end),
+      ),
+    );
+
+  const futureRecurringDepositIds = recurringDepositsDueInMonth
+    .map((r) => r.id)
+    .filter((id) => !realizedRecurringDepositIds.has(id));
+
+  const recurringDepositSplitRows =
+    futureRecurringDepositIds.length > 0
+      ? await db
+          .select({
+            recurringDepositId: schema.recurringDepositSplits.recurringDepositId,
+            targetType: schema.recurringDepositSplits.targetType,
+            percent: schema.recurringDepositSplits.percent,
+            pocketName: schema.pockets.name,
+          })
+          .from(schema.recurringDepositSplits)
+          .leftJoin(schema.pockets, eq(schema.pockets.id, schema.recurringDepositSplits.pocketId))
+          .where(inArray(schema.recurringDepositSplits.recurringDepositId, futureRecurringDepositIds))
+          .orderBy(asc(schema.recurringDepositSplits.sortOrder))
+      : [];
+
+  const splitsByRecurringDeposit = new Map<string, typeof recurringDepositSplitRows>();
+  for (const row of recurringDepositSplitRows) {
+    const list = splitsByRecurringDeposit.get(row.recurringDepositId) ?? [];
+    list.push(row);
+    splitsByRecurringDeposit.set(row.recurringDepositId, list);
+  }
+
+  for (const r of recurringDepositsDueInMonth) {
+    if (realizedRecurringDepositIds.has(r.id)) continue;
+    const splitParts = splitsByRecurringDeposit.get(r.id);
+    let source: string;
+    if (splitParts && splitParts.length > 0) {
+      const amounts = distributeAmountsByPercent(
+        r.amount,
+        splitParts.map((p) => p.percent),
+      );
+      source = amounts
+        .map((amt, i) => {
+          const p = splitParts[i];
+          if (!p) return "";
+          return p.targetType === "account"
+            ? `Conta ${formatCurrency(amt)}`
+            : `Caixinha ${p.pocketName ?? "?"} ${formatCurrency(amt)}`;
+        })
+        .filter(Boolean)
+        .join(" · ");
+    } else {
+      const tt = r.targetType ?? "account";
+      if (tt === "pocket" && r.pocketName) {
+        source = `Caixinha ${r.pocketName} ${formatCurrency(r.amount)}`;
+      } else if (tt === "pocket") {
+        source = "Caixinha";
+      } else {
+        source = "Conta corrente";
+      }
+    }
+    movements.push({
+      id: `future-deposit-${r.id}`,
+      type: "future_in",
+      date: r.nextExecutionDate,
+      title: r.title,
+      amount: Math.abs(r.amount),
+      source,
+      extra: "Depósito recorrente (previsto)",
     });
   }
 
@@ -1083,7 +1174,7 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
   movements.sort((a, b) => {
     const dateCmp = a.date.localeCompare(b.date);
     if (dateCmp !== 0) return dateCmp;
-    const order = { in: 0, out: 1, future_out: 2 };
+    const order = { in: 0, future_in: 1, out: 2, future_out: 3 };
     return order[a.type] - order[b.type];
   });
   return movements;

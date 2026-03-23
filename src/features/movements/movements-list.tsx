@@ -5,13 +5,16 @@ import {
   ArrowUpCircle,
   Calendar,
   AlertTriangle,
+  CalendarCheck,
   CheckCircle2,
+  Clock,
   WalletCards,
   Wallet,
   PiggyBank,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { differenceInCalendarDays, format } from "date-fns";
 import { useMemo, useState } from "react";
 
 import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
@@ -33,10 +36,206 @@ function addMonths(ym: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function localDayFromYmd(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Status relativo ao dia de hoje (só no mês corrente na tela): futuro, hoje, ontem ou antes. */
+type CalendarRelativeStatus =
+  | { kind: "today" }
+  | { kind: "dueToday" }
+  | { kind: "upcoming"; daysLeft: number; scope?: "purchase" | "due" }
+  | { kind: "yesterday" }
+  | { kind: "earlier" };
+
+function calendarRelativeStatus(
+  isCurrentMonth: boolean,
+  itemDate: string,
+  todayStr: string,
+): CalendarRelativeStatus | null {
+  if (!isCurrentMonth) return null;
+  const diff = differenceInCalendarDays(localDayFromYmd(itemDate), localDayFromYmd(todayStr));
+  if (diff > 0) return { kind: "upcoming", daysLeft: diff };
+  if (diff === 0) return { kind: "today" };
+  if (diff === -1) return { kind: "yesterday" };
+  return { kind: "earlier" };
+}
+
+/**
+ * Cartão: o compromisso só conta como “pago” depois do dia do vencimento da fatura.
+ * Contagem e “já pago” usam `dueDate`; sem vencimento calculado, cai na data da compra.
+ */
+function cardExpenseRelativeStatus(
+  isCurrentMonth: boolean,
+  dueDate: string,
+  todayStr: string,
+): CalendarRelativeStatus | null {
+  if (!isCurrentMonth) return null;
+  const untilDue = differenceInCalendarDays(localDayFromYmd(dueDate), localDayFromYmd(todayStr));
+  if (untilDue > 0) {
+    return { kind: "upcoming", daysLeft: untilDue, scope: "due" };
+  }
+  if (untilDue === 0) {
+    return { kind: "dueToday" };
+  }
+  const daysAfterDue = differenceInCalendarDays(localDayFromYmd(todayStr), localDayFromYmd(dueDate));
+  if (daysAfterDue === 1) {
+    return { kind: "earlier" };
+  }
+  if (daysAfterDue === 2) {
+    return { kind: "yesterday" };
+  }
+  return { kind: "earlier" };
+}
+
+function outgoingExpenseCalendarStatus(
+  item: MonthMovementRow,
+  isCurrentMonth: boolean,
+  todayStr: string,
+): CalendarRelativeStatus | null {
+  if (item.sourceType === "card" && item.dueDate) {
+    return cardExpenseRelativeStatus(isCurrentMonth, item.dueDate, todayStr);
+  }
+  return calendarRelativeStatus(isCurrentMonth, item.date, todayStr);
+}
+
+/** Entrada prevista (recorrente): só hoje ou dias à frente; datas passadas no mês ficam só “Previsto”. */
+function futureIncomingRelativeStatus(
+  isCurrentMonth: boolean,
+  itemDate: string,
+  todayStr: string,
+): null | { kind: "today" } | { kind: "upcoming"; daysLeft: number } {
+  if (!isCurrentMonth) return null;
+  const diff = differenceInCalendarDays(localDayFromYmd(itemDate), localDayFromYmd(todayStr));
+  if (diff > 0) return { kind: "upcoming", daysLeft: diff };
+  if (diff === 0) return { kind: "today" };
+  return null;
+}
+
+function ExpenseDateBadges({ status }: { status: CalendarRelativeStatus | null }) {
+  if (!status) return null;
+  if (status.kind === "dueToday") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-violet-500/70 bg-violet-50 font-normal text-violet-950 dark:border-violet-600/55 dark:bg-violet-950/35 dark:text-violet-100"
+      >
+        <Calendar className="h-3 w-3 shrink-0" aria-hidden />
+        Vence hoje
+      </Badge>
+    );
+  }
+  if (status.kind === "today") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-sky-500/70 bg-sky-50 font-normal text-sky-950 dark:border-sky-600/55 dark:bg-sky-950/35 dark:text-sky-100"
+      >
+        <CalendarCheck className="h-3 w-3 shrink-0" aria-hidden />
+        Pagamento hoje
+      </Badge>
+    );
+  }
+  if (status.kind === "upcoming") {
+    const toDue = status.scope === "due";
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-amber-500/70 bg-amber-50 font-normal text-amber-950 dark:border-amber-600/55 dark:bg-amber-950/35 dark:text-amber-100"
+      >
+        <Clock className="h-3 w-3 shrink-0" aria-hidden />
+        {toDue
+          ? status.daysLeft === 1
+            ? "Falta 1 dia para o vencimento"
+            : `Faltam ${status.daysLeft} dias para o vencimento`
+          : status.daysLeft === 1
+            ? "Falta 1 dia"
+            : `Faltam ${status.daysLeft} dias`}
+      </Badge>
+    );
+  }
+  if (status.kind === "yesterday") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-emerald-600/50 bg-emerald-50 font-normal text-emerald-950 dark:border-emerald-600/45 dark:bg-emerald-950/35 dark:text-emerald-100"
+      >
+        <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+        Foi pago ontem
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="gap-1 border-emerald-600/45 bg-emerald-50/90 font-normal text-emerald-950 dark:border-emerald-600/40 dark:bg-emerald-950/30 dark:text-emerald-100"
+    >
+      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+      Já pago
+    </Badge>
+  );
+}
+
+function IncomeDateBadges({ status }: { status: CalendarRelativeStatus | null }) {
+  if (!status) return null;
+  if (status.kind === "dueToday") return null;
+  if (status.kind === "today") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-green-600/60 bg-green-100/90 font-normal text-green-950 dark:border-green-600/45 dark:bg-green-950/40 dark:text-green-100"
+      >
+        <CalendarCheck className="h-3 w-3 shrink-0" aria-hidden />
+        Entrada hoje
+      </Badge>
+    );
+  }
+  if (status.kind === "upcoming") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-amber-500/70 bg-amber-50 font-normal text-amber-950 dark:border-amber-600/55 dark:bg-amber-950/35 dark:text-amber-100"
+      >
+        <Clock className="h-3 w-3 shrink-0" aria-hidden />
+        {status.daysLeft === 1 ? "Entra em 1 dia" : `Entra em ${status.daysLeft} dias`}
+      </Badge>
+    );
+  }
+  if (status.kind === "yesterday") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 border-green-600/50 bg-green-50 font-normal text-green-950 dark:border-green-600/45 dark:bg-green-950/35 dark:text-green-100"
+      >
+        <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+        Entrou ontem
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="gap-1 border-green-600/45 bg-green-50/90 font-normal text-green-950 dark:border-green-600/40 dark:bg-green-950/30 dark:text-green-100"
+    >
+      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+      Já entrou
+    </Badge>
+  );
+}
+
 function groupMovements(list: MonthMovementRow[] | undefined) {
-  if (!list) return { incoming: [] as MonthMovementRow[], outgoing: [] as MonthMovementRow[], future: [] as MonthMovementRow[] };
+  if (!list) {
+    return {
+      incoming: [] as MonthMovementRow[],
+      incomingFuture: [] as MonthMovementRow[],
+      outgoing: [] as MonthMovementRow[],
+      future: [] as MonthMovementRow[],
+    };
+  }
   return {
     incoming: list.filter((x) => x.type === "in"),
+    incomingFuture: list.filter((x) => x.type === "future_in"),
     outgoing: list.filter((x) => x.type === "out"),
     future: list.filter((x) => x.type === "future_out"),
   };
@@ -67,9 +266,11 @@ function SourceMetric({
 function OutMovementRow({
   item,
   onSelectPurchase,
+  dateBadge,
 }: {
   item: MonthMovementRow;
   onSelectPurchase: (id: string) => void;
+  dateBadge?: CalendarRelativeStatus | null;
 }) {
   const isCard = item.sourceType === "card";
   const isClickable = Boolean(item.purchaseId);
@@ -85,6 +286,7 @@ function OutMovementRow({
               Cartão
             </Badge>
           ) : null}
+          <ExpenseDateBadges status={dateBadge ?? null} />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
@@ -136,16 +338,26 @@ function OutMovementRow({
   return <div className={baseClass}>{inner}</div>;
 }
 
-function FutureMovementRow({ item }: { item: MonthMovementRow }) {
+function FutureMovementRow({
+  item,
+  dateBadge,
+}: {
+  item: MonthMovementRow;
+  dateBadge?: CalendarRelativeStatus | null;
+}) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/25">
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <ArrowUpCircle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
           <span className="font-medium text-amber-950 dark:text-amber-100">{item.title}</span>
-          <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/50 dark:text-amber-100">
-            Previsto
-          </Badge>
+          {dateBadge ? (
+            <ExpenseDateBadges status={dateBadge} />
+          ) : (
+            <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/50 dark:text-amber-100">
+              Previsto
+            </Badge>
+          )}
           {item.sourceType === "card" ? (
             <Badge variant="outline" className="font-normal">
               Cartão
@@ -178,13 +390,68 @@ function FutureMovementRow({ item }: { item: MonthMovementRow }) {
   );
 }
 
-function InMovementRow({ item }: { item: MonthMovementRow }) {
+function FutureInMovementRow({
+  item,
+  futureRelative,
+}: {
+  item: MonthMovementRow;
+  futureRelative: ReturnType<typeof futureIncomingRelativeStatus>;
+}) {
+  const primaryBadge =
+    futureRelative?.kind === "today" ? (
+      <Badge
+        variant="outline"
+        className="gap-1 border-sky-500/70 bg-sky-50 font-normal text-sky-950 dark:border-sky-600/55 dark:bg-sky-950/35 dark:text-sky-100"
+      >
+        <CalendarCheck className="h-3 w-3 shrink-0" aria-hidden />
+        Vai entrar hoje
+      </Badge>
+    ) : futureRelative?.kind === "upcoming" ? (
+      <Badge
+        variant="outline"
+        className="gap-1 border-amber-500/70 bg-amber-50 font-normal text-amber-950 dark:border-amber-600/55 dark:bg-amber-950/35 dark:text-amber-100"
+      >
+        <Clock className="h-3 w-3 shrink-0" aria-hidden />
+        {futureRelative.daysLeft === 1 ? "Falta 1 dia" : `Faltam ${futureRelative.daysLeft} dias`}
+      </Badge>
+    ) : (
+      <Badge className="border-sky-300 bg-sky-100 text-sky-900 hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-900/50 dark:text-sky-100">
+        Previsto
+      </Badge>
+    );
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-3 dark:border-sky-900/50 dark:bg-sky-950/30">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowDownCircle className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+          <span className="font-medium text-sky-950 dark:text-sky-100">{item.title}</span>
+          {primaryBadge}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {formatDisplayDate(item.date)}
+          </span>
+          {item.source ? <span>{item.source}</span> : null}
+          {item.extra ? <span>{item.extra}</span> : null}
+        </div>
+      </div>
+      <span className="shrink-0 font-semibold tabular-nums text-sky-800 dark:text-sky-300">
+        +{formatCurrency(item.amount)}
+      </span>
+    </div>
+  );
+}
+
+function InMovementRow({ item, dateBadge }: { item: MonthMovementRow; dateBadge?: CalendarRelativeStatus | null }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-3 dark:border-green-900/50 dark:bg-green-950/30">
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <ArrowDownCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-500" />
           <span className="font-medium text-green-900 dark:text-green-100">{item.title}</span>
+          <IncomeDateBadges status={dateBadge ?? null} />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
@@ -215,18 +482,34 @@ export function MovementsList() {
   const maxMonth = addMonths(current, 12);
   const canGoPrev = month > minMonth;
   const canGoNext = month < maxMonth;
+  const todayStr = format(new Date(), "yyyy-MM-dd");
 
   const grouped = useMemo(() => groupMovements(list), [list]);
 
   const totals = useMemo(() => {
-    if (!list) return { in: 0, out: 0 };
-    let inTotal = 0;
-    let outTotal = 0;
-    for (const item of list) {
-      if (item.type === "in") inTotal += item.amount;
-      else outTotal += Math.abs(item.amount);
+    if (!list) {
+      return {
+        inRealized: 0,
+        futureIn: 0,
+        entradas: 0,
+        despesas: 0,
+        recorrentesPrevistas: 0,
+        resultado: 0,
+      };
     }
-    return { in: inTotal, out: outTotal };
+    let inRealized = 0;
+    let futureIn = 0;
+    let despesas = 0;
+    let recorrentesPrevistas = 0;
+    for (const item of list) {
+      if (item.type === "in") inRealized += item.amount;
+      else if (item.type === "future_in") futureIn += item.amount;
+      else if (item.type === "out") despesas += Math.abs(item.amount);
+      else if (item.type === "future_out") recorrentesPrevistas += Math.abs(item.amount);
+    }
+    const entradas = inRealized + futureIn;
+    const resultado = entradas - despesas - recorrentesPrevistas;
+    return { inRealized, futureIn, entradas, despesas, recorrentesPrevistas, resultado };
   }, [list]);
 
   const hasAnySource = Boolean(
@@ -454,20 +737,64 @@ export function MovementsList() {
             </p>
           ) : (
             <>
-              <div className="mb-6 flex flex-wrap gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 dark:bg-muted/20">
-                <div className="flex items-center gap-2">
-                  <ArrowDownCircle className="h-5 w-5 text-green-600 dark:text-green-500" />
-                  <span className="text-sm text-muted-foreground">Entradas:</span>
-                  <span className="font-semibold tabular-nums text-green-700 dark:text-green-400">
-                    {formatCurrency(totals.in)}
-                  </span>
+              <div className="mb-6 space-y-4 rounded-lg border border-border bg-muted/30 px-4 py-4 dark:bg-muted/20">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Entradas (realizadas)</p>
+                    <p className="text-lg font-semibold tabular-nums text-green-700 dark:text-green-400">
+                      {formatCurrency(totals.inRealized)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Entradas previstas</p>
+                    <p className="text-lg font-semibold tabular-nums text-sky-700 dark:text-sky-400">
+                      {formatCurrency(totals.futureIn)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">Depósitos recorrentes ainda não creditados</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Despesas</p>
+                    <p className="text-lg font-semibold tabular-nums text-red-700 dark:text-red-400">
+                      {formatCurrency(totals.despesas)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Recorrentes previstas</p>
+                    <p className="text-lg font-semibold tabular-nums text-amber-800 dark:text-amber-300">
+                      {formatCurrency(totals.recorrentesPrevistas)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">Despesas recorrentes a executar</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ArrowUpCircle className="h-5 w-5 text-red-600 dark:text-red-500" />
-                  <span className="text-sm text-muted-foreground">Saídas:</span>
-                  <span className="font-semibold tabular-nums text-red-700 dark:text-red-400">
-                    {formatCurrency(totals.out)}
-                  </span>
+                <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">Total de entradas</p>
+                    <p className="text-xs text-muted-foreground">
+                      {totals.futureIn > 0
+                        ? `Realizadas + previstas: ${formatCurrency(totals.inRealized)} + ${formatCurrency(totals.futureIn)}`
+                        : "Somente lançamentos já creditados neste mês"}
+                    </p>
+                  </div>
+                  <p className="text-xl font-bold tabular-nums text-green-700 dark:text-green-400">
+                    {formatCurrency(totals.entradas)}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-background/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Resultado do mês (estimado)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Entradas − despesas − recorrentes previstas
+                    </p>
+                  </div>
+                  <p
+                    className={cn(
+                      "text-xl font-bold tabular-nums",
+                      totals.resultado >= 0 ? "text-green-700 dark:text-green-400" : "text-destructive",
+                    )}
+                  >
+                    {totals.resultado >= 0 ? "+" : ""}
+                    {formatCurrency(totals.resultado)}
+                  </p>
                 </div>
               </div>
 
@@ -478,7 +805,32 @@ export function MovementsList() {
                     <ul className="space-y-2">
                       {grouped.incoming.map((item) => (
                         <li key={item.id}>
-                          <InMovementRow item={item} />
+                          <InMovementRow
+                            item={item}
+                            dateBadge={calendarRelativeStatus(isCurrentMonth, item.date, todayStr)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {grouped.incomingFuture.length > 0 ? (
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      Entradas previstas (depósitos recorrentes)
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Aparecem aqui até serem creditados ao executar os recorrentes ou quando o depósito já estiver
+                      lançado no mês.
+                    </p>
+                    <ul className="space-y-2">
+                      {grouped.incomingFuture.map((item) => (
+                        <li key={item.id}>
+                          <FutureInMovementRow
+                            item={item}
+                            futureRelative={futureIncomingRelativeStatus(isCurrentMonth, item.date, todayStr)}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -494,7 +846,11 @@ export function MovementsList() {
                     <ul className="space-y-2">
                       {grouped.outgoing.map((item) => (
                         <li key={item.id}>
-                          <OutMovementRow item={item} onSelectPurchase={setDetailPurchaseId} />
+                          <OutMovementRow
+                            item={item}
+                            onSelectPurchase={setDetailPurchaseId}
+                            dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -507,7 +863,10 @@ export function MovementsList() {
                     <ul className="space-y-2">
                       {grouped.future.map((item) => (
                         <li key={item.id}>
-                          <FutureMovementRow item={item} />
+                          <FutureMovementRow
+                            item={item}
+                            dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                          />
                         </li>
                       ))}
                     </ul>

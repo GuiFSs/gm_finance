@@ -1,6 +1,6 @@
 "use client";
 
-import { addMonths, format, parseISO } from "date-fns";
+import { addMonths, format } from "date-fns";
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,7 +22,7 @@ import {
   usePurchaseDetail,
   useUpdatePurchase,
 } from "@/shared/hooks/use-app-data";
-import { formatCurrency, formatDisplayDate, toInputDate } from "@/shared/utils/formatters";
+import { formatCurrency, formatDisplayDate, parseLocalDateYmd, toInputDate } from "@/shared/utils/formatters";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardTitle } from "@/shared/ui/card";
@@ -199,7 +199,7 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
   /** Mesmas datas que o backend gera com addMonths na primeira data. */
   const debitSchedulePreview = useMemo(() => {
     if (!debitsFromBalance || !purchaseDateWatch) return [];
-    const start = parseISO(purchaseDateWatch);
+    const start = parseLocalDateYmd(purchaseDateWatch);
     if (Number.isNaN(start.getTime())) return [];
     return Array.from({ length: installments }, (_, i) => format(addMonths(start, i), "yyyy-MM-dd"));
   }, [debitsFromBalance, purchaseDateWatch, installments]);

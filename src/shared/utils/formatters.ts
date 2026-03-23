@@ -39,6 +39,21 @@ export function toInputDate(value: Date) {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Interpreta `yyyy-MM-dd` como data civil no fuso local (meia-noite local).
+ * `new Date("yyyy-MM-dd")` em JS é UTC e em fusos como America/Sao_Paulo vira o dia anterior ao usar `format()` local.
+ */
+export function parseLocalDateYmd(isoDate: string): Date {
+  const [yRaw, mRaw, dRaw] = isoDate.trim().split("-");
+  const y = Number(yRaw);
+  const m = Number(mRaw);
+  const d = Number(dRaw);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    return new Date(NaN);
+  }
+  return new Date(y, m - 1, d);
+}
+
 /** Formata data ISO (yyyy-MM-dd) para exibição pt-BR: dd/MM/yyyy */
 export function formatDisplayDate(isoDate: string): string {
   if (!isoDate || typeof isoDate !== "string") return "";

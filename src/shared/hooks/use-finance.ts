@@ -14,7 +14,7 @@ export function useDashboard() {
 
 export type MonthMovementRow = {
   id: string;
-  type: "in" | "out" | "future_out";
+  type: "in" | "out" | "future_out" | "future_in";
   date: string;
   title: string;
   amount: number;
