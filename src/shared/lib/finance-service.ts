@@ -693,11 +693,11 @@ export async function getDashboardData() {
         ? parts
             .map((p) =>
               p.targetType === "account"
-                ? `Conta ${Number(p.percent).toFixed(0)}%`
+                ? `Conta corrente ${Number(p.percent).toFixed(0)}%`
                 : `Caixinha ${p.pocketName ?? "?"} ${Number(p.percent).toFixed(0)}%`
             )
             .join(" · ")
-        : "Conta 100%";
+        : "Conta corrente 100%";
     return {
       title: row.title,
       amount: row.amount,
@@ -815,7 +815,7 @@ export function formatCardFundingPlanLabel(
       const pct = total > 0 ? (s.amount / total) * 100 : 0;
       const base =
         s.targetType === "account"
-          ? `Conta ${formatCurrency(s.amount)}`
+          ? `Conta corrente ${formatCurrency(s.amount)}`
           : `Caixinha ${s.pocketName ?? "?"} ${formatCurrency(s.amount)}`;
       return `${base} (${pct.toFixed(0)}%)`;
     })
@@ -1100,7 +1100,7 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
         ? parts
             .map((p) =>
               p.targetType === "account"
-                ? `Conta ${formatCurrency(p.amount)}`
+                ? `Conta corrente ${formatCurrency(p.amount)}`
                 : `Caixinha ${p.pocketName ?? "?"} ${formatCurrency(p.amount)}`
             )
             .join(" · ")
@@ -1180,7 +1180,7 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
           const p = splitParts[i];
           if (!p) return "";
           return p.targetType === "account"
-            ? `Conta ${formatCurrency(amt)}`
+            ? `Conta corrente ${formatCurrency(amt)}`
             : `Caixinha ${p.pocketName ?? "?"} ${formatCurrency(amt)}`;
         })
         .filter(Boolean)

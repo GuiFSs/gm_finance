@@ -250,6 +250,8 @@ function groupMovements(list: MonthMovementRow[] | undefined) {
 
 type MovementsExpenseViewMode = "chronological" | "by_payment_source";
 
+const CHECKING_ACCOUNT_LABEL = "Conta corrente";
+
 type PaymentSourceGroup = {
   key: string;
   label: string;
@@ -262,8 +264,9 @@ type PaymentSourceGroup = {
 };
 
 function paymentSourceGroupKey(item: MonthMovementRow): string {
-  const t = item.sourceType ?? "account";
-  if (t === "account") return "account";
+  /** `""` não é nullish — sem `trim` gerava dois grupos “conta” vs `account`. */
+  const t = (item.sourceType ?? "").trim();
+  if (!t || t === "account") return "account";
   if ((t === "pocket" || t === "card") && item.sourceId) return `${t}:${item.sourceId}`;
   return `${t}:${item.source ?? item.id}`;
 }
@@ -278,13 +281,16 @@ function stripCurrencyAmountsFromSourceLabel(s: string): string {
 
 function incomingDestinationGroupKey(item: MonthMovementRow): string {
   const raw = item.source?.trim() ?? "";
-  const normalized = stripCurrencyAmountsFromSourceLabel(raw);
+  const normalized = stripCurrencyAmountsFromSourceLabel(raw).trim();
+  const L = normalized.toLowerCase();
+  /** Depósitos “Conta R$ …” viram só “Conta” após strip; unifica com “Conta corrente”. */
+  if (L === "conta" || L === "conta corrente") return CHECKING_ACCOUNT_LABEL;
   return normalized || `sem-destino:${item.id}`;
 }
 
 function incomeGroupSortOrder(label: string): number {
   const L = label.toLowerCase();
-  if (L === "conta corrente") return 0;
+  if (L === "conta corrente" || L === "conta") return 0;
   if (L.includes("·") || L.includes(" · ")) return 2;
   if (L.includes("caixinha")) return 1;
   if (L.startsWith("conta ")) return 0;
@@ -303,12 +309,18 @@ function groupIncomeByDestination(items: MonthMovementRow[]): PaymentSourceGroup
   const out: PaymentSourceGroup[] = [];
   for (const [key, groupItems] of map) {
     const first = groupItems[0]!;
-    const rawLabel = stripCurrencyAmountsFromSourceLabel(first.source ?? "") || "Outros";
-    const sortOrder = incomeGroupSortOrder(rawLabel);
+    const stripped = stripCurrencyAmountsFromSourceLabel(first.source ?? "").trim();
+    const label =
+      !stripped
+        ? "Outros"
+        : stripped.toLowerCase() === "conta" || stripped.toLowerCase() === "conta corrente"
+          ? CHECKING_ACCOUNT_LABEL
+          : stripped;
+    const sortOrder = incomeGroupSortOrder(label);
     const subtotal = groupItems.reduce((s, i) => s + i.amount, 0);
     out.push({
       key,
-      label: rawLabel,
+      label,
       sortOrder,
       items: groupItems,
       subtotal,
@@ -333,12 +345,12 @@ function groupExpensesByPaymentSource(items: MonthMovementRow[]): PaymentSourceG
   const out: PaymentSourceGroup[] = [];
   for (const [key, groupItems] of map) {
     const first = groupItems[0]!;
+    const st = (first.sourceType ?? "").trim();
     const label =
-      first.sourceType === "account" || !first.sourceType
-        ? "Conta corrente"
+      !st || st === "account"
+        ? CHECKING_ACCOUNT_LABEL
         : (first.source?.trim() || (first.sourceType === "pocket" ? "Caixinha" : "Cartão"));
-    const sortOrder =
-      first.sourceType === "account" || !first.sourceType ? 0 : first.sourceType === "pocket" ? 1 : 2;
+    const sortOrder = !st || st === "account" ? 0 : first.sourceType === "pocket" ? 1 : 2;
     const subtotal = groupItems.reduce((s, i) => s + i.amount, 0);
     out.push({
       key,
