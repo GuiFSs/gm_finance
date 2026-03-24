@@ -28,6 +28,8 @@ export type MonthMovementRow = {
   installmentCount?: number;
   statementMonth?: string;
   dueDate?: string | null;
+  /** Plano de pagamento da fatura (conta + caixinhas), quando cadastrado para aquele mês de fatura. */
+  cardFundingPlan?: string | null;
 };
 
 type SourcesSummaryRow = {
@@ -215,6 +217,90 @@ export function useUpdateCard() {
         }),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cards"] }),
+  });
+}
+
+export type CardStatementFundingMonthApi = {
+  statementMonth: string;
+  splits: Array<{
+    id: string;
+    targetType: "account" | "pocket";
+    pocketId: string | null;
+    pocketName: string | null;
+    amount: number;
+  }>;
+};
+
+function normalizeInvoiceTotal(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export type CardStatementInvoiceLineApi = {
+  id: string;
+  title: string;
+  amount: number;
+  purchaseDate: string;
+  installmentNumber: number | null;
+  installmentCount: number | null;
+};
+
+function normalizeInvoiceLines(value: unknown): CardStatementInvoiceLineApi[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) return null;
+  return value.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: String(r.id ?? ""),
+      title: String(r.title ?? ""),
+      amount: (typeof r.amount === "number" ? r.amount : Number(r.amount)) || 0,
+      purchaseDate: String(r.purchaseDate ?? ""),
+      installmentNumber: r.installmentNumber == null ? null : Number(r.installmentNumber),
+      installmentCount: r.installmentCount == null ? null : Number(r.installmentCount),
+    };
+  });
+}
+
+export function useCardStatementFunding(cardId: string | null, statementMonth?: string) {
+  const monthKey = statementMonth?.trim() ?? "";
+  return useQuery({
+    queryKey: ["card-statement-funding", cardId, monthKey],
+    queryFn: async ({ queryKey }) => {
+      const [, id, sm] = queryKey as [string, string, string];
+      const qs =
+        sm && /^\d{4}-\d{2}$/.test(sm) ? `?statementMonth=${encodeURIComponent(sm)}` : "";
+      const response = await fetcher<{
+        data: CardStatementFundingMonthApi[];
+        invoiceTotal: unknown;
+        invoiceLines?: unknown;
+      }>(`/api/cards/${id}/statement-funding${qs}`);
+      return {
+        plans: response.data,
+        invoiceTotal: normalizeInvoiceTotal(response.invoiceTotal),
+        invoiceLines: normalizeInvoiceLines(response.invoiceLines),
+      };
+    },
+    enabled: Boolean(cardId),
+  });
+}
+
+export function useReplaceCardStatementFunding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      cardId: string;
+      statementMonth: string;
+      splits: Array<{ targetType: "account" | "pocket"; pocketId?: string; amount: number }>;
+    }) =>
+      fetcher(`/api/cards/${payload.cardId}/statement-funding`, {
+        method: "PUT",
+        body: JSON.stringify({ statementMonth: payload.statementMonth, splits: payload.splits }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["card-statement-funding"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    },
   });
 }
 

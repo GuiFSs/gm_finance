@@ -36,6 +36,20 @@
       "when": 1774142575086,
       "tag": "0004_recurring_expense_tags_many",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1774312031840,
+      "tag": "0005_chunky_speed",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1774312031841,
+      "tag": "0006_card_funding_amount",
+      "breakpoints": true
     }
   ]
 }

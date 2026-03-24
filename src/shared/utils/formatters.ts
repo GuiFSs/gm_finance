@@ -44,7 +44,10 @@ export function toInputDate(value: Date) {
  * `new Date("yyyy-MM-dd")` em JS é UTC e em fusos como America/Sao_Paulo vira o dia anterior ao usar `format()` local.
  */
 export function parseLocalDateYmd(isoDate: string): Date {
-  const [yRaw, mRaw, dRaw] = isoDate.trim().split("-");
+  const trimmed = isoDate.trim();
+  /** Aceita `yyyy-MM-dd` ou prefixo ISO (`yyyy-MM-ddTHH:mm:ss...`, `...Z`). */
+  const datePart = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed)?.[1] ?? trimmed;
+  const [yRaw, mRaw, dRaw] = datePart.split("-");
   const y = Number(yRaw);
   const m = Number(mRaw);
   const d = Number(dRaw);

@@ -778,6 +778,8 @@ export type MonthMovement = {
   statementMonth?: string;
   /** Data prevista de vencimento da fatura (cartão). */
   dueDate?: string | null;
+  /** Texto do plano (conta/caixinhas) para pagar a fatura do cartão naquele mês, se cadastrado. */
+  cardFundingPlan?: string | null;
 };
 
 /** Mês de referência da fatura: compras no dia de fechamento em diante vão para o mês seguinte. */
@@ -798,6 +800,244 @@ export function cardDueDateForStatement(statementMonthYm: string, dueDay: number
   return format(new Date(y, m - 1, day), "yyyy-MM-dd");
 }
 
+export type CardFundingSplitInput = {
+  targetType: "account" | "pocket";
+  pocketId?: string | null;
+  amount: number;
+};
+
+export function formatCardFundingPlanLabel(
+  splits: Array<{ targetType: "account" | "pocket"; pocketName: string | null; amount: number }>
+): string {
+  const total = splits.reduce((a, s) => a + s.amount, 0);
+  return splits
+    .map((s) => {
+      const pct = total > 0 ? (s.amount / total) * 100 : 0;
+      const base =
+        s.targetType === "account"
+          ? `Conta ${formatCurrency(s.amount)}`
+          : `Caixinha ${s.pocketName ?? "?"} ${formatCurrency(s.amount)}`;
+      return `${base} (${pct.toFixed(0)}%)`;
+    })
+    .join(" · ");
+}
+
+function assertValidCardFundingSplits(splits: CardFundingSplitInput[]) {
+  if (splits.length === 0) {
+    throw new Error("Informe pelo menos uma fonte para o pagamento da fatura.");
+  }
+  const sum = splits.reduce((a, s) => a + s.amount, 0);
+  if (sum <= DEPOSIT_SUM_EPS) {
+    throw new Error("A soma dos valores deve ser maior que zero.");
+  }
+  for (const s of splits) {
+    if (s.amount < 0) {
+      throw new Error("Os valores não podem ser negativos.");
+    }
+    if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+      throw new Error("Selecione a caixinha em cada parte que vem de caixinha.");
+    }
+  }
+}
+
+export async function getCardFundingPlanLabelsForStatementMonth(statementMonthYm: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({
+      cardId: schema.cardStatementFundingSplits.cardId,
+      targetType: schema.cardStatementFundingSplits.targetType,
+      amount: schema.cardStatementFundingSplits.amount,
+      pocketName: schema.pockets.name,
+      sortOrder: schema.cardStatementFundingSplits.sortOrder,
+    })
+    .from(schema.cardStatementFundingSplits)
+    .leftJoin(schema.pockets, eq(schema.pockets.id, schema.cardStatementFundingSplits.pocketId))
+    .where(eq(schema.cardStatementFundingSplits.statementMonth, statementMonthYm))
+    .orderBy(asc(schema.cardStatementFundingSplits.cardId), asc(schema.cardStatementFundingSplits.sortOrder));
+
+  const byCard = new Map<string, Array<{ targetType: "account" | "pocket"; pocketName: string | null; amount: number }>>();
+  for (const r of rows) {
+    const tt = r.targetType as "account" | "pocket";
+    const list = byCard.get(r.cardId) ?? [];
+    list.push({ targetType: tt, pocketName: r.pocketName, amount: r.amount });
+    byCard.set(r.cardId, list);
+  }
+  const labels = new Map<string, string>();
+  for (const [cardId, splits] of byCard) {
+    labels.set(cardId, formatCardFundingPlanLabel(splits));
+  }
+  return labels;
+}
+
+export type CardStatementFundingMonthRow = {
+  statementMonth: string;
+  splits: Array<{
+    id: string;
+    targetType: "account" | "pocket";
+    pocketId: string | null;
+    pocketName: string | null;
+    amount: number;
+  }>;
+};
+
+export type CardStatementInvoiceLine = {
+  id: string;
+  title: string;
+  amount: number;
+  purchaseDate: string;
+  installmentNumber: number | null;
+  installmentCount: number | null;
+};
+
+/**
+ * Compras no cartão cuja fatura (mês de referência) é `statementMonthYm`, com total.
+ * Mesma regra que em movimentos: `cardStatementMonth` + dia de fechamento do cartão.
+ */
+export async function getCardStatementInvoiceDetail(
+  cardId: string,
+  statementMonthYm: string,
+  userId: string
+): Promise<{ total: number; lines: CardStatementInvoiceLine[] } | null> {
+  const rows = await db
+    .select({
+      closingDay: schema.cards.closingDay,
+      createdByUserId: schema.cards.createdByUserId,
+    })
+    .from(schema.cards)
+    .where(eq(schema.cards.id, cardId))
+    .limit(1);
+  const card = rows[0];
+  if (!card || card.createdByUserId !== userId) return null;
+
+  const purchases = await db
+    .select({
+      id: schema.purchases.id,
+      title: schema.purchases.title,
+      amount: schema.purchases.amount,
+      purchaseDate: schema.purchases.purchaseDate,
+      installmentNumber: schema.purchases.installmentNumber,
+      installmentCount: schema.purchases.installmentCount,
+    })
+    .from(schema.purchases)
+    .where(and(eq(schema.purchases.paymentSourceType, "card"), eq(schema.purchases.paymentSourceId, cardId)));
+
+  const lines: CardStatementInvoiceLine[] = [];
+  for (const p of purchases) {
+    if (cardStatementMonth(p.purchaseDate, card.closingDay) !== statementMonthYm) continue;
+    lines.push({
+      id: p.id,
+      title: p.title,
+      amount: Math.abs(Number(p.amount)),
+      purchaseDate: p.purchaseDate,
+      installmentNumber: p.installmentNumber ?? null,
+      installmentCount: p.installmentCount ?? null,
+    });
+  }
+  lines.sort((a, b) => {
+    const d = a.purchaseDate.localeCompare(b.purchaseDate);
+    if (d !== 0) return d;
+    return a.title.localeCompare(b.title, "pt-BR");
+  });
+  const total = lines.reduce((s, x) => s + x.amount, 0);
+  return { total: Number(total.toFixed(2)), lines };
+}
+
+/** Soma das compras na fatura (atalho para `getCardStatementInvoiceDetail`). */
+export async function getCardStatementInvoiceTotal(
+  cardId: string,
+  statementMonthYm: string,
+  userId: string
+): Promise<number | null> {
+  const d = await getCardStatementInvoiceDetail(cardId, statementMonthYm, userId);
+  return d ? d.total : null;
+}
+
+export async function listCardStatementFundingByCard(
+  cardId: string,
+  userId: string
+): Promise<CardStatementFundingMonthRow[] | null> {
+  const card = await db
+    .select({ id: schema.cards.id })
+    .from(schema.cards)
+    .where(and(eq(schema.cards.id, cardId), eq(schema.cards.createdByUserId, userId)))
+    .limit(1);
+  if (card.length === 0) return null;
+
+  const rows = await db
+    .select({
+      statementMonth: schema.cardStatementFundingSplits.statementMonth,
+      id: schema.cardStatementFundingSplits.id,
+      targetType: schema.cardStatementFundingSplits.targetType,
+      pocketId: schema.cardStatementFundingSplits.pocketId,
+      amount: schema.cardStatementFundingSplits.amount,
+      sortOrder: schema.cardStatementFundingSplits.sortOrder,
+      pocketName: schema.pockets.name,
+    })
+    .from(schema.cardStatementFundingSplits)
+    .leftJoin(schema.pockets, eq(schema.pockets.id, schema.cardStatementFundingSplits.pocketId))
+    .where(eq(schema.cardStatementFundingSplits.cardId, cardId))
+    .orderBy(asc(schema.cardStatementFundingSplits.statementMonth), asc(schema.cardStatementFundingSplits.sortOrder));
+
+  const byMonth = new Map<string, CardStatementFundingMonthRow["splits"]>();
+  for (const r of rows) {
+    const list = byMonth.get(r.statementMonth) ?? [];
+    list.push({
+      id: r.id,
+      targetType: r.targetType as "account" | "pocket",
+      pocketId: r.pocketId,
+      pocketName: r.pocketName,
+      amount: r.amount,
+    });
+    byMonth.set(r.statementMonth, list);
+  }
+  return Array.from(byMonth.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([statementMonth, splits]) => ({ statementMonth, splits }));
+}
+
+export async function replaceCardStatementFunding(
+  cardId: string,
+  userId: string,
+  statementMonth: string,
+  splits: CardFundingSplitInput[]
+) {
+  const card = await db
+    .select({ id: schema.cards.id })
+    .from(schema.cards)
+    .where(and(eq(schema.cards.id, cardId), eq(schema.cards.createdByUserId, userId)))
+    .limit(1);
+  if (card.length === 0) throw new Error("Cartão não encontrado");
+
+  const deleteSplitsForMonth = async (executor: Pick<typeof db, "run">) => {
+    /** SQL direto evita edge cases do builder com LibSQL/Turso em DELETE com `where` composto. */
+    await executor.run(
+      sql`DELETE FROM card_statement_funding_splits WHERE card_id = ${cardId} AND statement_month = ${statementMonth}`
+    );
+  };
+
+  if (splits.length === 0) {
+    await deleteSplitsForMonth(db);
+    return;
+  }
+
+  assertValidCardFundingSplits(splits);
+
+  await db.transaction(async (tx) => {
+    await deleteSplitsForMonth(tx);
+    await tx.insert(schema.cardStatementFundingSplits).values(
+      splits.map((s, idx) => ({
+        id: crypto.randomUUID(),
+        cardId,
+        statementMonth,
+        targetType: s.targetType,
+        pocketId: s.targetType === "pocket" ? s.pocketId! : null,
+        amount: s.amount,
+        sortOrder: idx,
+        createdByUserId: userId,
+      }))
+    );
+  });
+}
+
 export type SourceSummary = {
   account?: { balance: number; outflows: number; sufficient: boolean };
   pockets: Array<{ id: string; name: string; balance: number; outflows: number; sufficient: boolean }>;
@@ -812,6 +1052,12 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
   const end = format(endOfMonth(new Date(y, m - 1)), "yyyy-MM-dd");
   const today = format(new Date(), "yyyy-MM-dd");
   const movements: MonthMovement[] = [];
+  let cardFundingLabels = new Map<string, string>();
+  try {
+    cardFundingLabels = await getCardFundingPlanLabelsForStatementMonth(targetYm);
+  } catch {
+    // Não bloquear movimentos se o plano de fatura falhar (ex.: migração pendente no banco).
+  }
 
   const depositsInMonth = await db
     .select({
@@ -1069,6 +1315,10 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       installmentCount: p.installmentCount,
       statementMonth,
       dueDate: dueDate ?? null,
+      cardFundingPlan:
+        p.paymentSourceType === "card" && p.paymentSourceId
+          ? cardFundingLabels.get(p.paymentSourceId) ?? null
+          : null,
     });
   }
 
@@ -1168,6 +1418,10 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       extra: "Recorrente (previsto)",
       statementMonth,
       dueDate: dueDate ?? null,
+      cardFundingPlan:
+        r.paymentSourceType === "card" && r.paymentSourceId
+          ? cardFundingLabels.get(r.paymentSourceId) ?? null
+          : null,
     });
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Pencil } from "lucide-react";
+import { CreditCard, Landmark, Pencil } from "lucide-react";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { useCards, useCreateCard, useCurrentUser, useUpdateCard } from "@/shared/hooks/use-app-data";
 import { formatCurrency } from "@/shared/utils/formatters";
+import { CardStatementFundingModal } from "@/features/cards/card-statement-funding-modal";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { CurrencyInput } from "@/shared/ui/currency-input";
@@ -47,6 +48,8 @@ export function CardManagement() {
 
   const [openCreate, setOpenCreate] = useState(false);
   const [editingCard, setEditingCard] = useState<CardRow | null>(null);
+  const [fundingCard, setFundingCard] = useState<CardRow | null>(null);
+  const [fundingEpoch, setFundingEpoch] = useState(0);
 
   const editForm = useForm<CardFormValues>({
     resolver: zodResolver(schema),
@@ -145,6 +148,13 @@ export function CardManagement() {
         </form>
       </Modal>
 
+      <CardStatementFundingModal
+        key={fundingCard ? `${fundingCard.id}-${fundingEpoch}` : "idle"}
+        card={fundingCard ? { id: fundingCard.id, name: fundingCard.name } : null}
+        open={!!fundingCard}
+        onClose={() => setFundingCard(null)}
+      />
+
       <Modal
         open={!!editingCard}
         onClose={() => setEditingCard(null)}
@@ -240,6 +250,20 @@ export function CardManagement() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setFundingCard(card);
+                        setFundingEpoch((e) => e + 1);
+                      }}
+                      aria-label="Planejar pagamento da fatura"
+                      title="De onde pagar a fatura (por mês)"
+                    >
+                      <Landmark className="h-4 w-4" />
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"

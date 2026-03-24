@@ -40,6 +40,27 @@ export const cards = sqliteTable("cards", {
     .default(sql`(unixepoch() * 1000)`),
 });
 
+/** De onde sairá o dinheiro para pagar a fatura do cartão, por mês de referência da fatura (yyyy-MM). */
+export const cardStatementFundingSplits = sqliteTable("card_statement_funding_splits", {
+  id: text("id").primaryKey(),
+  cardId: text("card_id")
+    .notNull()
+    .references(() => cards.id, { onDelete: "cascade" }),
+  /** Mês de referência da fatura (igual ao usado nas compras no cartão). */
+  statementMonth: text("statement_month").notNull(),
+  targetType: text("target_type", { enum: depositTargetTypeEnum }).notNull(),
+  pocketId: text("pocket_id").references(() => pockets.id),
+  /** Valor planejado a retirar desta fonte (R$). */
+  amount: real("amount").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdByUserId: text("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
 export const categories = sqliteTable("categories", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),

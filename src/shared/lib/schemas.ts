@@ -77,6 +77,17 @@ export const updateCardSchema = z.object({
   dueDay: z.coerce.number().int().min(1).max(31),
 });
 
+export const cardStatementFundingSplitInputSchema = z.object({
+  targetType: z.enum(["account", "pocket"]),
+  pocketId: z.string().optional(),
+  amount: z.coerce.number().min(0),
+});
+
+export const replaceCardStatementFundingSchema = z.object({
+  statementMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  splits: z.array(cardStatementFundingSplitInputSchema),
+});
+
 export const createCategorySchema = z.object({
   name: z.string().min(1),
   createdByUserId: z.string().min(1),

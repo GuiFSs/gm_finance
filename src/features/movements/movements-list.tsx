@@ -8,22 +8,29 @@ import {
   CalendarCheck,
   CheckCircle2,
   Clock,
+  Landmark,
   WalletCards,
   Wallet,
   PiggyBank,
   ChevronLeft,
   ChevronRight,
+  Layers,
 } from "lucide-react";
 import { differenceInCalendarDays, format } from "date-fns";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 
+import { CardStatementFundingModal } from "@/features/cards/card-statement-funding-modal";
 import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
 import { useMonthMovements, type MonthMovementRow } from "@/shared/hooks/use-app-data";
 import { cn } from "@/shared/lib/cn";
 import { formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/shared/ui/accordion";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
+import { Label } from "@/shared/ui/label";
+import { SelectOptions } from "@/shared/ui/select-options";
 
 const currentMonthParam = () => {
   const now = new Date();
@@ -241,6 +248,177 @@ function groupMovements(list: MonthMovementRow[] | undefined) {
   };
 }
 
+type MovementsExpenseViewMode = "chronological" | "by_payment_source";
+
+type PaymentSourceGroup = {
+  key: string;
+  label: string;
+  sortOrder: number;
+  sourceType?: MonthMovementRow["sourceType"];
+  /** Presente para cartão/caixinha quando o movimento tem `sourceId`. */
+  sourceId?: string | null;
+  items: MonthMovementRow[];
+  subtotal: number;
+};
+
+function paymentSourceGroupKey(item: MonthMovementRow): string {
+  const t = item.sourceType ?? "account";
+  if (t === "account") return "account";
+  if ((t === "pocket" || t === "card") && item.sourceId) return `${t}:${item.sourceId}`;
+  return `${t}:${item.source ?? item.id}`;
+}
+
+/** Remove valores em R$ do texto de destino para agrupar depósitos iguais com valores diferentes. */
+function stripCurrencyAmountsFromSourceLabel(s: string): string {
+  return s
+    .replace(/\s*R\$\s*[\d.\s\u00a0]+(?:,\d{2})?/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function incomingDestinationGroupKey(item: MonthMovementRow): string {
+  const raw = item.source?.trim() ?? "";
+  const normalized = stripCurrencyAmountsFromSourceLabel(raw);
+  return normalized || `sem-destino:${item.id}`;
+}
+
+function incomeGroupSortOrder(label: string): number {
+  const L = label.toLowerCase();
+  if (L === "conta corrente") return 0;
+  if (L.includes("·") || L.includes(" · ")) return 2;
+  if (L.includes("caixinha")) return 1;
+  if (L.startsWith("conta ")) return 0;
+  return 3;
+}
+
+/** Agrupa entradas realizadas ou previstas pelo destino (conta / caixinha / divisão). */
+function groupIncomeByDestination(items: MonthMovementRow[]): PaymentSourceGroup[] {
+  const map = new Map<string, MonthMovementRow[]>();
+  for (const item of items) {
+    const k = incomingDestinationGroupKey(item);
+    const arr = map.get(k) ?? [];
+    arr.push(item);
+    map.set(k, arr);
+  }
+  const out: PaymentSourceGroup[] = [];
+  for (const [key, groupItems] of map) {
+    const first = groupItems[0]!;
+    const rawLabel = stripCurrencyAmountsFromSourceLabel(first.source ?? "") || "Outros";
+    const sortOrder = incomeGroupSortOrder(rawLabel);
+    const subtotal = groupItems.reduce((s, i) => s + i.amount, 0);
+    out.push({
+      key,
+      label: rawLabel,
+      sortOrder,
+      items: groupItems,
+      subtotal,
+    });
+  }
+  out.sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+  });
+  return out;
+}
+
+/** Agrupa despesas (realizadas ou previstas) por conta, caixinha ou cartão. */
+function groupExpensesByPaymentSource(items: MonthMovementRow[]): PaymentSourceGroup[] {
+  const map = new Map<string, MonthMovementRow[]>();
+  for (const item of items) {
+    const k = paymentSourceGroupKey(item);
+    const arr = map.get(k) ?? [];
+    arr.push(item);
+    map.set(k, arr);
+  }
+  const out: PaymentSourceGroup[] = [];
+  for (const [key, groupItems] of map) {
+    const first = groupItems[0]!;
+    const label =
+      first.sourceType === "account" || !first.sourceType
+        ? "Conta corrente"
+        : (first.source?.trim() || (first.sourceType === "pocket" ? "Caixinha" : "Cartão"));
+    const sortOrder =
+      first.sourceType === "account" || !first.sourceType ? 0 : first.sourceType === "pocket" ? 1 : 2;
+    const subtotal = groupItems.reduce((s, i) => s + i.amount, 0);
+    out.push({
+      key,
+      label,
+      sortOrder,
+      sourceType: first.sourceType,
+      sourceId: first.sourceId ?? null,
+      items: groupItems,
+      subtotal,
+    });
+  }
+  out.sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+  });
+  return out;
+}
+
+/** Nome do cartão para o título do modal (rótulo costuma ser "Cartão Nome"). */
+function cardDisplayNameForExpenseGroup(group: PaymentSourceGroup): string {
+  const raw = group.label.trim();
+  return raw.replace(/^Cartão\s+/i, "").trim() || raw;
+}
+
+function PaymentSourceGroupHeader({
+  label,
+  subtotal,
+  sourceType,
+  direction = "out",
+  variant = "default",
+  trailingAction,
+}: {
+  label: string;
+  subtotal: number;
+  sourceType?: MonthMovementRow["sourceType"];
+  /** Entradas: ícone/ cor verde; saídas: vermelho. */
+  direction?: "in" | "out";
+  /** `plain`: sem linha inferior (ex.: cabeçalho dentro de AccordionTrigger). */
+  variant?: "default" | "plain";
+  /** Ex.: botão de planejar pagamento do cartão (use stopPropagation no clique). */
+  trailingAction?: ReactNode;
+}) {
+  let Icon: typeof Landmark;
+  if (direction === "in") {
+    const L = label.toLowerCase();
+    if (L.includes("·") || label.includes(" · ")) Icon = Layers;
+    else if (L.includes("caixinha")) Icon = PiggyBank;
+    else Icon = Landmark;
+  } else {
+    Icon = sourceType === "card" ? WalletCards : sourceType === "pocket" ? PiggyBank : Landmark;
+  }
+  const isIn = direction === "in";
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-2",
+        variant === "default" && "border-b border-border pb-2",
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="truncate font-semibold text-foreground">{label}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {trailingAction}
+        <Badge
+          variant="secondary"
+          className={cn(
+            "shrink-0 tabular-nums font-semibold",
+            isIn ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
+          )}
+        >
+          Subtotal {isIn ? "+" : ""}
+          {formatCurrency(subtotal)}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
 function SourceMetric({
   label,
   value,
@@ -312,6 +490,12 @@ function OutMovementRow({
             ) : null}
           </div>
         ) : null}
+        {isCard && item.cardFundingPlan ? (
+          <div className="pl-6 text-xs text-muted-foreground">
+            Pagar fatura com:{" "}
+            <span className="font-medium text-foreground">{item.cardFundingPlan}</span>
+          </div>
+        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <span className="text-right font-semibold tabular-nums text-red-700 dark:text-red-400">
@@ -380,6 +564,12 @@ function FutureMovementRow({
                 · venc. <span className="font-medium text-foreground">{formatDisplayDate(item.dueDate)}</span>
               </>
             ) : null}
+          </div>
+        ) : null}
+        {item.sourceType === "card" && item.cardFundingPlan ? (
+          <div className="pl-6 text-xs text-muted-foreground">
+            Pagar fatura com:{" "}
+            <span className="font-medium text-foreground">{item.cardFundingPlan}</span>
           </div>
         ) : null}
       </div>
@@ -473,7 +663,14 @@ function InMovementRow({ item, dateBadge }: { item: MonthMovementRow; dateBadge?
 export function MovementsList() {
   const [month, setMonth] = useState<string>(currentMonthParam);
   const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
-  const { data: movementsResponse, isLoading } = useMonthMovements(month);
+  const [fundingModalCard, setFundingModalCard] = useState<{
+    id: string;
+    name: string;
+    /** Subtotal do grupo (Despesas realizadas) — mesmo critério do total da fatura naquele mês. */
+    invoiceTotalFromList?: number;
+  } | null>(null);
+  const [fundingModalEpoch, setFundingModalEpoch] = useState(0);
+  const { data: movementsResponse, isLoading, isError, error } = useMonthMovements(month);
   const list = movementsResponse?.data;
   const sourcesSummary = movementsResponse?.sourcesSummary;
   const isCurrentMonth = month === currentMonthParam();
@@ -485,6 +682,14 @@ export function MovementsList() {
   const todayStr = format(new Date(), "yyyy-MM-dd");
 
   const grouped = useMemo(() => groupMovements(list), [list]);
+  const [expenseViewMode, setExpenseViewMode] = useState<MovementsExpenseViewMode>("by_payment_source");
+  const incomingByDestination = useMemo(() => groupIncomeByDestination(grouped.incoming), [grouped.incoming]);
+  const incomingFutureByDestination = useMemo(
+    () => groupIncomeByDestination(grouped.incomingFuture),
+    [grouped.incomingFuture],
+  );
+  const outgoingBySource = useMemo(() => groupExpensesByPaymentSource(grouped.outgoing), [grouped.outgoing]);
+  const futureBySource = useMemo(() => groupExpensesByPaymentSource(grouped.future), [grouped.future]);
 
   const totals = useMemo(() => {
     if (!list) {
@@ -530,20 +735,34 @@ export function MovementsList() {
           if (!open) setDetailPurchaseId(null);
         }}
       />
+      <CardStatementFundingModal
+        key={fundingModalCard ? `${fundingModalCard.id}-${fundingModalEpoch}-${month}` : "idle"}
+        card={fundingModalCard ? { id: fundingModalCard.id, name: fundingModalCard.name } : null}
+        open={!!fundingModalCard}
+        initialStatementMonth={month}
+        invoiceTotalFromList={fundingModalCard?.invoiceTotalFromList}
+        invoiceTotalFromListMonth={fundingModalCard?.invoiceTotalFromList != null ? month : undefined}
+        onClose={() => setFundingModalCard(null)}
+      />
 
       {isCurrentMonth && hasAnySource && sourcesSummary && (
         <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Wallet className="h-4 w-4" />
-              Dinheiro suficiente por fonte?
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Conta e caixinhas: saldo atual vs. saídas do mês. Cartão: o &quot;usado&quot; já inclui as compras do mês — o
-              limite disponível não é descontado de novo pelas saídas.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
+          <Accordion type="single" collapsible defaultValue="sources-summary" className="w-full">
+            <AccordionItem value="sources-summary" className="border-0">
+              <AccordionTrigger className="px-6 py-4 hover:no-underline data-[state=open]:pb-3">
+                <div className="flex flex-1 flex-col items-start gap-1 pr-2 text-left">
+                  <span className="flex items-center gap-2 text-base font-semibold leading-none text-foreground">
+                    <Wallet className="h-4 w-4 shrink-0" aria-hidden />
+                    Dinheiro suficiente por fonte?
+                  </span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    Conta e caixinhas: saldo atual vs. saídas do mês. Cartão: o &quot;usado&quot; já inclui as compras do mês — o
+                    limite disponível não é descontado de novo pelas saídas.
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-6 pt-0">
+                <div className="space-y-3">
             {sourcesSummary.account && (
               <div
                 className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${
@@ -688,12 +907,15 @@ export function MovementsList() {
                 Uma ou mais fontes estão com saldo insuficiente ou com limite de cartão estourado.
               </p>
             )}
-          </CardContent>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
       )}
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="space-y-4 pb-3">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base">Filtrar por mês</CardTitle>
             <div className="flex w-full max-w-md items-center justify-center gap-2 sm:w-auto sm:justify-end">
@@ -724,12 +946,43 @@ export function MovementsList() {
               </Button>
             </div>
           </div>
+          <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="movements-expense-view" className="text-sm font-medium text-foreground">
+                Lançamentos — visualização
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Agrupe entradas e despesas por destino ou forma de pagamento; subtotais por grupo.
+              </p>
+            </div>
+            <SelectOptions
+              id="movements-expense-view"
+              className="w-full min-w-0 sm:w-[280px]"
+              value={expenseViewMode}
+              onValueChange={(v) => setExpenseViewMode(v as MovementsExpenseViewMode)}
+              options={[
+                { value: "chronological", label: "Lista por data" },
+                { value: "by_payment_source", label: "Por destino / forma de pagamento (padrão)" },
+              ]}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               Carregando...
+            </div>
+          ) : isError ? (
+            <div className="space-y-2 py-12 text-center">
+              <p className="text-sm font-medium text-destructive">Não foi possível carregar os movimentos.</p>
+              <p className="text-xs text-muted-foreground">
+                {error instanceof Error ? error.message : "Erro desconhecido"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Se você atualizou o app recentemente, rode <code className="rounded bg-muted px-1 py-0.5">npm run db:migrate</code>{" "}
+                no projeto para aplicar migrações do banco.
+              </p>
             </div>
           ) : !list || list.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
@@ -802,16 +1055,40 @@ export function MovementsList() {
                 {grouped.incoming.length > 0 ? (
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Entradas</h2>
-                    <ul className="space-y-2">
-                      {grouped.incoming.map((item) => (
-                        <li key={item.id}>
-                          <InMovementRow
-                            item={item}
-                            dateBadge={calendarRelativeStatus(isCurrentMonth, item.date, todayStr)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
+                    {expenseViewMode === "chronological" ? (
+                      <ul className="space-y-2">
+                        {grouped.incoming.map((item) => (
+                          <li key={item.id}>
+                            <InMovementRow
+                              item={item}
+                              dateBadge={calendarRelativeStatus(isCurrentMonth, item.date, todayStr)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="space-y-6">
+                        {incomingByDestination.map((g) => (
+                          <div key={g.key} className="space-y-2">
+                            <PaymentSourceGroupHeader
+                              label={g.label}
+                              subtotal={g.subtotal}
+                              direction="in"
+                            />
+                            <ul className="space-y-2">
+                              {g.items.map((item) => (
+                                <li key={item.id}>
+                                  <InMovementRow
+                                    item={item}
+                                    dateBadge={calendarRelativeStatus(isCurrentMonth, item.date, todayStr)}
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 ) : null}
 
@@ -824,16 +1101,40 @@ export function MovementsList() {
                       Aparecem aqui até serem creditados ao executar os recorrentes ou quando o depósito já estiver
                       lançado no mês.
                     </p>
-                    <ul className="space-y-2">
-                      {grouped.incomingFuture.map((item) => (
-                        <li key={item.id}>
-                          <FutureInMovementRow
-                            item={item}
-                            futureRelative={futureIncomingRelativeStatus(isCurrentMonth, item.date, todayStr)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
+                    {expenseViewMode === "chronological" ? (
+                      <ul className="space-y-2">
+                        {grouped.incomingFuture.map((item) => (
+                          <li key={item.id}>
+                            <FutureInMovementRow
+                              item={item}
+                              futureRelative={futureIncomingRelativeStatus(isCurrentMonth, item.date, todayStr)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="space-y-6">
+                        {incomingFutureByDestination.map((g) => (
+                          <div key={g.key} className="space-y-2">
+                            <PaymentSourceGroupHeader
+                              label={g.label}
+                              subtotal={g.subtotal}
+                              direction="in"
+                            />
+                            <ul className="space-y-2">
+                              {g.items.map((item) => (
+                                <li key={item.id}>
+                                  <FutureInMovementRow
+                                    item={item}
+                                    futureRelative={futureIncomingRelativeStatus(isCurrentMonth, item.date, todayStr)}
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
                 ) : null}
 
@@ -843,33 +1144,153 @@ export function MovementsList() {
                     <p className="text-xs text-muted-foreground">
                       Toque em uma despesa cadastrada para ver parcelas, fatura do cartão e vencimento.
                     </p>
-                    <ul className="space-y-2">
-                      {grouped.outgoing.map((item) => (
-                        <li key={item.id}>
-                          <OutMovementRow
-                            item={item}
-                            onSelectPurchase={setDetailPurchaseId}
-                            dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
+                    {expenseViewMode === "chronological" ? (
+                      <ul className="space-y-2">
+                        {grouped.outgoing.map((item) => (
+                          <li key={item.id}>
+                            <OutMovementRow
+                              item={item}
+                              onSelectPurchase={setDetailPurchaseId}
+                              dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <Accordion
+                        type="multiple"
+                        className="w-full space-y-3"
+                        defaultValue={outgoingBySource.map((g) => g.key)}
+                      >
+                        {outgoingBySource.map((g) => (
+                          <AccordionItem
+                            key={g.key}
+                            value={g.key}
+                            className="overflow-hidden rounded-lg border border-border"
+                          >
+                            <AccordionTrigger className="px-3 py-3 hover:no-underline">
+                              <PaymentSourceGroupHeader
+                                label={g.label}
+                                subtotal={g.subtotal}
+                                sourceType={g.sourceType}
+                                variant="plain"
+                                trailingAction={
+                                  g.sourceType === "card" && g.sourceId ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 gap-1 px-2 text-xs"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setFundingModalCard({
+                                          id: g.sourceId!,
+                                          name: cardDisplayNameForExpenseGroup(g),
+                                          invoiceTotalFromList: Math.abs(g.subtotal),
+                                        });
+                                        setFundingModalEpoch((x) => x + 1);
+                                      }}
+                                    >
+                                      <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      Pagamento da fatura
+                                    </Button>
+                                  ) : null
+                                }
+                              />
+                            </AccordionTrigger>
+                            <AccordionContent className="px-3 pb-3 pt-0">
+                              <ul className="space-y-2">
+                                {g.items.map((item) => (
+                                  <li key={item.id}>
+                                    <OutMovementRow
+                                      item={item}
+                                      onSelectPurchase={setDetailPurchaseId}
+                                      dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    )}
                   </section>
                 ) : null}
 
                 {grouped.future.length > 0 ? (
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recorrentes previstas</h2>
-                    <ul className="space-y-2">
-                      {grouped.future.map((item) => (
-                        <li key={item.id}>
-                          <FutureMovementRow
-                            item={item}
-                            dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
+                    {expenseViewMode === "chronological" ? (
+                      <ul className="space-y-2">
+                        {grouped.future.map((item) => (
+                          <li key={item.id}>
+                            <FutureMovementRow
+                              item={item}
+                              dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <Accordion
+                        type="multiple"
+                        className="w-full space-y-3"
+                        defaultValue={futureBySource.map((g) => g.key)}
+                      >
+                        {futureBySource.map((g) => (
+                          <AccordionItem
+                            key={g.key}
+                            value={g.key}
+                            className="overflow-hidden rounded-lg border border-border"
+                          >
+                            <AccordionTrigger className="px-3 py-3 hover:no-underline">
+                              <PaymentSourceGroupHeader
+                                label={g.label}
+                                subtotal={g.subtotal}
+                                sourceType={g.sourceType}
+                                variant="plain"
+                                trailingAction={
+                                  g.sourceType === "card" && g.sourceId ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 gap-1 px-2 text-xs"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setFundingModalCard({
+                                          id: g.sourceId!,
+                                          name: cardDisplayNameForExpenseGroup(g),
+                                        });
+                                        setFundingModalEpoch((x) => x + 1);
+                                      }}
+                                    >
+                                      <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      Pagamento da fatura
+                                    </Button>
+                                  ) : null
+                                }
+                              />
+                            </AccordionTrigger>
+                            <AccordionContent className="px-3 pb-3 pt-0">
+                              <ul className="space-y-2">
+                                {g.items.map((item) => (
+                                  <li key={item.id}>
+                                    <FutureMovementRow
+                                      item={item}
+                                      dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    )}
                   </section>
                 ) : null}
               </div>
