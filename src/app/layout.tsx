@@ -17,6 +17,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "G&M Finance",
   description: "Gestão financeira pessoal",
+  manifest: "/site.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "G&M Finance",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
@@ -26,6 +35,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className="dark">
+      <head>
+        <meta name="theme-color" content="#0c1222" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
