@@ -768,8 +768,9 @@ export function MovementsList() {
                     Dinheiro suficiente por fonte?
                   </span>
                   <span className="text-xs font-normal text-muted-foreground">
-                    Conta e caixinhas: saldo atual vs. saídas do mês. Cartão: o &quot;usado&quot; já inclui as compras do mês — o
-                    limite disponível não é descontado de novo pelas saídas.
+                    Conta e caixinhas: saldo atual vs. saídas ainda não debitadas no saldo (compras com data futura no mês).
+                    Compras de hoje ou anteriores já estão no saldo e não entram de novo nas saídas. Cartão: o &quot;usado&quot;
+                    já inclui as compras do mês — o limite disponível não é descontado de novo pelas saídas.
                   </span>
                 </div>
               </AccordionTrigger>

@@ -321,6 +321,41 @@ export function useCreateCategory() {
   });
 }
 
+export function useUpdateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; name: string }) =>
+      fetcher<{ data: NamedEntity }>(`/api/categories/${payload.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: payload.name }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase"] });
+      queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    },
+  });
+}
+
+export function useDeleteCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<{ data: { id: string } }>(`/api/categories/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase"] });
+      queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    },
+  });
+}
+
 export function useTags() {
   return useQuery({
     queryKey: ["tags"],

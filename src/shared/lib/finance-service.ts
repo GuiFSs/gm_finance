@@ -1434,6 +1434,17 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
   return movements;
 }
 
+/**
+ * Compras em conta ou caixinha com data ≤ `ledgerBalanceCutoffDate()` já entram no saldo
+ * retornado por getCheckingBalance / getPocketBalances. Somar essas linhas de novo em
+ * "saídas do mês" duplica o débito na comparação (saldo atual − compra já descontada − saídas).
+ */
+function purchaseOutflowAlreadyInLedgerBalance(o: MonthMovement, cutoff: string): boolean {
+  if (!o.purchaseId) return false;
+  if (o.sourceType !== "account" && o.sourceType !== "pocket") return false;
+  return o.date <= cutoff;
+}
+
 export function computeSourcesSummary(
   movements: MonthMovement[],
   ctx: {
@@ -1442,12 +1453,14 @@ export function computeSourcesSummary(
     cardUsage: Array<{ cardId: string; cardName: string; creditLimit: number; used: number }>;
   }
 ): SourceSummary {
+  const ledgerCutoff = ledgerBalanceCutoffDate();
   const outflows = movements.filter((x) => x.type === "out" || x.type === "future_out");
   let accountOutflows = 0;
   const pocketOutflows = new Map<string, number>();
   const cardOutflows = new Map<string, number>();
 
   for (const o of outflows) {
+    if (purchaseOutflowAlreadyInLedgerBalance(o, ledgerCutoff)) continue;
     const amount = Math.abs(o.amount);
     if (o.sourceType === "account" || !o.sourceType) {
       accountOutflows += amount;

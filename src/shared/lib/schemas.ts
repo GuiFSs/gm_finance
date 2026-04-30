@@ -93,6 +93,10 @@ export const createCategorySchema = z.object({
   createdByUserId: z.string().min(1),
 });
 
+export const updateCategorySchema = z.object({
+  name: z.string().min(1),
+});
+
 export const createTagSchema = z.object({
   name: z.string().min(1),
   createdByUserId: z.string().min(1),
