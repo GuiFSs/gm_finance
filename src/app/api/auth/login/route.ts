@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { createSessionToken, setSessionCookie } from "@/shared/lib/auth";
 import { jsonError, parseBody } from "@/shared/lib/api";
-import { seedInitialUsers } from "@/shared/lib/finance-service";
+import {
+  runRecurringDeposits,
+  runRecurringExpenses,
+  seedInitialUsers,
+} from "@/shared/lib/finance-service";
 import { loginSchema } from "@/shared/lib/schemas";
 
 export async function POST(request: NextRequest) {
@@ -24,6 +28,8 @@ export async function POST(request: NextRequest) {
     if (!user || body.pin !== loginPin) {
       return jsonError("Invalid credentials", 401);
     }
+
+    await Promise.all([runRecurringExpenses(), runRecurringDeposits()]);
 
     const token = await createSessionToken({ userId: user.id, name: user.name as "Guilherme" | "Maryane" });
     const response = NextResponse.json({ data: { userId: user.id, name: user.name } });
