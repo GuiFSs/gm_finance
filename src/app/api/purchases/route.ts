@@ -10,9 +10,11 @@ export async function GET(request: NextRequest) {
   if (!session) return jsonError("Unauthorized", 401);
 
   const searchParams = request.nextUrl.searchParams;
+  const categoryIds = searchParams.getAll("categoryId").filter(Boolean);
+  const tagIds = searchParams.getAll("tagId").filter(Boolean);
   const data = await getPurchases({
-    categoryId: searchParams.get("categoryId") ?? undefined,
-    tagId: searchParams.get("tagId") ?? undefined,
+    categoryIds: categoryIds.length ? categoryIds : undefined,
+    tagIds: tagIds.length ? tagIds : undefined,
     userId: searchParams.get("userId") ?? undefined,
     startDate: searchParams.get("startDate") ?? undefined,
     endDate: searchParams.get("endDate") ?? undefined,

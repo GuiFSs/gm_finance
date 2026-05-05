@@ -526,14 +526,16 @@ export async function createBalanceAdjustment(input: {
 }
 
 export async function getPurchases(filters: {
-  categoryId?: string;
-  tagId?: string;
+  categoryIds?: string[];
+  tagIds?: string[];
   userId?: string;
   startDate?: string;
   endDate?: string;
 }) {
   const conditions = [];
-  if (filters.categoryId) conditions.push(eq(schema.purchases.categoryId, filters.categoryId));
+  if (filters.categoryIds?.length) {
+    conditions.push(inArray(schema.purchases.categoryId, filters.categoryIds));
+  }
   if (filters.userId) conditions.push(eq(schema.purchases.createdByUserId, filters.userId));
   if (filters.startDate) conditions.push(gte(schema.purchases.purchaseDate, filters.startDate));
   if (filters.endDate) conditions.push(lte(schema.purchases.purchaseDate, filters.endDate));
@@ -587,8 +589,9 @@ export async function getPurchases(filters: {
   }
 
   const merged = purchaseRows.map((row) => ({ ...row, tags: tagMap.get(row.id) ?? [], tagIds: tagIdMap.get(row.id) ?? [] }));
-  if (!filters.tagId) return merged;
-  return merged.filter((row) => row.tagIds.includes(filters.tagId as string));
+  if (!filters.tagIds?.length) return merged;
+  const tagSet = new Set(filters.tagIds);
+  return merged.filter((row) => row.tagIds.some((id) => tagSet.has(id)));
 }
 
 export async function getDashboardData() {

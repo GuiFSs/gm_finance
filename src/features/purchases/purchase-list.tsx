@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  ArrowDownUp,
   Calendar,
   ChevronRight,
+  ChevronsUpDown,
   CreditCard,
   Filter,
   Landmark,
@@ -14,7 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -33,9 +35,11 @@ import { formatCalendarMonthLabel, formatCurrency, formatDisplayDate } from "@/s
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { SelectOptions } from "@/shared/ui/select-options";
 import { PurchaseForm } from "@/features/purchases/purchase-form";
 
@@ -46,12 +50,83 @@ const PAYMENT_LABEL: Record<string, string> = {
 };
 
 const defaultFilters = {
-  categoryId: "",
-  tagId: "",
+  categoryIds: [] as string[],
+  tagIds: [] as string[],
   userId: "",
   startDate: "",
   endDate: "",
 };
+
+type EntityOption = { id: string; name: string };
+
+function MultiEntityFilter({
+  label,
+  options,
+  selectedIds,
+  onChange,
+  emptySummary,
+  clearLabel,
+}: {
+  label: string;
+  options: EntityOption[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  emptySummary: string;
+  clearLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = useCallback(
+    (id: string) => {
+      onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+    },
+    [onChange, selectedIds],
+  );
+  const summary = useMemo(() => {
+    if (selectedIds.length === 0) return emptySummary;
+    if (selectedIds.length === 1) {
+      return options.find((o) => o.id === selectedIds[0])?.name ?? "1 selecionada";
+    }
+    return `${selectedIds.length} selecionadas`;
+  }, [emptySummary, options, selectedIds]);
+
+  return (
+    <div className="space-y-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" role="combobox" className="h-10 w-full justify-between font-normal" type="button">
+            <span className="truncate">{summary}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-2" align="start">
+          <div className="max-h-60 space-y-0.5 overflow-y-auto">
+            {options.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-muted-foreground">Nenhuma opção</p>
+            ) : (
+              options.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggle(opt.id)}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
+                >
+                  <Checkbox checked={selectedIds.includes(opt.id)} className="pointer-events-none" />
+                  <span className="truncate">{opt.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+          {selectedIds.length > 0 ? (
+            <Button variant="ghost" size="sm" className="mt-2 h-8 w-full" onClick={() => onChange([])} type="button">
+              {clearLabel}
+            </Button>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 function purchaseGroupKey(p: PurchaseRow) {
   return `${p.title}\0${p.paymentSourceType}\0${p.paymentSourceId ?? ""}\0${p.installmentCount}`;
@@ -101,8 +176,30 @@ function groupPurchases(rows: PurchaseRow[]): PurchaseGroup[] {
       tags: [...tagSet],
     });
   }
-  out.sort((a, b) => b.firstDate.localeCompare(a.firstDate));
   return out;
+}
+
+type PurchaseSortKey = "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
+
+function sortPurchaseGroups(groups: PurchaseGroup[], sortKey: PurchaseSortKey): PurchaseGroup[] {
+  const copy = [...groups];
+  switch (sortKey) {
+    case "date_desc":
+      copy.sort((a, b) => b.firstDate.localeCompare(a.firstDate));
+      break;
+    case "date_asc":
+      copy.sort((a, b) => a.firstDate.localeCompare(b.firstDate));
+      break;
+    case "amount_desc":
+      copy.sort((a, b) => b.totalAmount - a.totalAmount);
+      break;
+    case "amount_asc":
+      copy.sort((a, b) => a.totalAmount - b.totalAmount);
+      break;
+    default:
+      break;
+  }
+  return copy;
 }
 
 function PaymentSourceBadge({ type }: { type: PurchaseRow["paymentSourceType"] }) {
@@ -125,6 +222,7 @@ export function PurchaseList() {
   const [openTagModal, setOpenTagModal] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [sortKey, setSortKey] = useState<PurchaseSortKey>("date_desc");
 
   const editFromUrl = searchParams.get("edit");
   useEffect(() => {
@@ -135,8 +233,8 @@ export function PurchaseList() {
   }, [editFromUrl, router]);
 
   const purchases = usePurchases({
-    categoryId: filters.categoryId || undefined,
-    tagId: filters.tagId || undefined,
+    categoryIds: filters.categoryIds.length ? filters.categoryIds : undefined,
+    tagIds: filters.tagIds.length ? filters.tagIds : undefined,
     userId: filters.userId || undefined,
     startDate: filters.startDate || undefined,
     endDate: filters.endDate || undefined,
@@ -168,8 +266,8 @@ export function PurchaseList() {
   });
 
   const hasActiveFilters =
-    Boolean(filters.categoryId) ||
-    Boolean(filters.tagId) ||
+    filters.categoryIds.length > 0 ||
+    filters.tagIds.length > 0 ||
     Boolean(filters.userId) ||
     Boolean(filters.startDate) ||
     Boolean(filters.endDate);
@@ -177,7 +275,8 @@ export function PurchaseList() {
   const list = purchases.data ?? [];
   const isLoading = purchases.isLoading;
 
-  const grouped = useMemo(() => groupPurchases(list), [list]);
+  const grouped = useMemo(() => sortPurchaseGroups(groupPurchases(list), sortKey), [list, sortKey]);
+  const purchasesTotal = useMemo(() => grouped.reduce((s, g) => s + g.totalAmount, 0), [grouped]);
 
   return (
     <div className="space-y-6">
@@ -217,6 +316,22 @@ export function PurchaseList() {
           </Button>
         </div>
       </div>
+
+      {!isLoading ? (
+        <Card className="border-primary/20 bg-primary/5 shadow-sm">
+          <CardContent className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total das despesas</p>
+              <p className="text-xs text-muted-foreground">
+                {hasActiveFilters ? "Soma do que aparece com os filtros atuais." : "Soma de todas as despesas listadas."}
+              </p>
+            </div>
+            <p className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+              {formatCurrency(purchasesTotal)}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Modal
         open={openPurchaseModal}
@@ -280,7 +395,9 @@ export function PurchaseList() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle className="text-base font-semibold">Filtros</CardTitle>
-              <p className="text-sm text-muted-foreground">Refine por categoria, tag, usuário ou período.</p>
+              <p className="text-sm text-muted-foreground">
+                Refine por categorias, tags, usuário ou período (várias categorias e tags ao mesmo tempo).
+              </p>
             </div>
             <Button
               type="button"
@@ -297,34 +414,22 @@ export function PurchaseList() {
         {filtersExpanded && (
           <CardContent className="space-y-4 pt-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="space-y-2">
-                <Label htmlFor="filter-category" className="text-xs text-muted-foreground">
-                  Categoria
-                </Label>
-                <SelectOptions
-                  id="filter-category"
-                  value={filters.categoryId}
-                  onValueChange={(v) => setFilters((prev) => ({ ...prev, categoryId: v }))}
-                  options={[
-                    { value: "", label: "Todas" },
-                    ...(categories.data ?? []).map((item) => ({ value: item.id, label: item.name })),
-                  ]}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="filter-tag" className="text-xs text-muted-foreground">
-                  Tag
-                </Label>
-                <SelectOptions
-                  id="filter-tag"
-                  value={filters.tagId}
-                  onValueChange={(v) => setFilters((prev) => ({ ...prev, tagId: v }))}
-                  options={[
-                    { value: "", label: "Todas" },
-                    ...(tags.data ?? []).map((item) => ({ value: item.id, label: item.name })),
-                  ]}
-                />
-              </div>
+              <MultiEntityFilter
+                label="Categorias"
+                emptySummary="Todas as categorias"
+                clearLabel="Limpar categorias"
+                options={(categories.data ?? []).map((item) => ({ id: item.id, name: item.name }))}
+                selectedIds={filters.categoryIds}
+                onChange={(categoryIds) => setFilters((prev) => ({ ...prev, categoryIds }))}
+              />
+              <MultiEntityFilter
+                label="Tags"
+                emptySummary="Todas as tags"
+                clearLabel="Limpar tags"
+                options={(tags.data ?? []).map((item) => ({ id: item.id, name: item.name }))}
+                selectedIds={filters.tagIds}
+                onChange={(tagIds) => setFilters((prev) => ({ ...prev, tagIds }))}
+              />
               <div className="space-y-2">
                 <Label htmlFor="filter-user" className="text-xs text-muted-foreground">
                   Usuário
@@ -378,8 +483,8 @@ export function PurchaseList() {
       </Card>
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">Suas despesas</h2>
             <p className="text-sm text-muted-foreground">
               {isLoading
@@ -388,6 +493,23 @@ export function PurchaseList() {
                   ? "Nenhum resultado"
                   : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} agrupadas · toque para ver parcelas e datas`}
             </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[220px]">
+            <Label htmlFor="purchase-sort" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ArrowDownUp className="h-3.5 w-3.5" />
+              Ordenar por
+            </Label>
+            <SelectOptions
+              id="purchase-sort"
+              value={sortKey}
+              onValueChange={(v) => setSortKey(v as PurchaseSortKey)}
+              options={[
+                { value: "date_desc", label: "Data (mais recente)" },
+                { value: "date_asc", label: "Data (mais antiga)" },
+                { value: "amount_desc", label: "Valor (maior primeiro)" },
+                { value: "amount_asc", label: "Valor (menor primeiro)" },
+              ]}
+            />
           </div>
         </div>
 

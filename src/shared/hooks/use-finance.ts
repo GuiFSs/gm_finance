@@ -88,9 +88,25 @@ export function usePurchaseDetail(purchaseId: string | null) {
   });
 }
 
-export function usePurchases(filters: Record<string, string | undefined>) {
+export type PurchasesQuery = {
+  categoryIds?: string[];
+  tagIds?: string[];
+  userId?: string;
+  startDate?: string;
+  endDate?: string;
+};
+
+export function usePurchases(filters: PurchasesQuery) {
   const params = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+  if (filters.userId) params.set("userId", filters.userId);
+  if (filters.startDate) params.set("startDate", filters.startDate);
+  if (filters.endDate) params.set("endDate", filters.endDate);
+  for (const id of filters.categoryIds ?? []) {
+    if (id) params.append("categoryId", id);
+  }
+  for (const id of filters.tagIds ?? []) {
+    if (id) params.append("tagId", id);
+  }
   return useQuery({
     queryKey: ["purchases", filters],
     queryFn: () => fetcher<{ data: PurchaseRow[] }>(`/api/purchases?${params.toString()}`),
