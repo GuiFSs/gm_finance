@@ -127,9 +127,17 @@ export function PurchaseDetailDialog({
               {data.paymentSourceType === "card" && data.closingDay != null && data.dueDay != null ? (
                 <p className="rounded-lg border border-border bg-muted/30 px-3.5 py-3 text-sm leading-relaxed text-muted-foreground">
                   Fechamento no dia <span className="font-medium text-foreground">{data.closingDay}</span> · vencimento
-                  no dia <span className="font-medium text-foreground">{data.dueDay}</span> do{" "}
-                  <span className="font-medium text-foreground">mesmo mês</span> da fatura. Compras a partir do dia do
-                  fechamento entram na fatura do mês seguinte.
+                  no dia <span className="font-medium text-foreground">{data.dueDay}</span>{" "}
+                  {data.dueDay <= data.closingDay ? (
+                    <>
+                      do <span className="font-medium text-foreground">mês seguinte</span> ao da fatura
+                    </>
+                  ) : (
+                    <>
+                      do <span className="font-medium text-foreground">mesmo mês</span> da fatura
+                    </>
+                  )}
+                  . Compras a partir do dia do fechamento entram na fatura do mês seguinte.
                 </p>
               ) : null}
 

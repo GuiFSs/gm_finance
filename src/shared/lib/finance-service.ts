@@ -793,14 +793,23 @@ export function cardStatementMonth(purchaseDate: string, closingDay: number): st
   return format(startOfMonth(anchor), "yyyy-MM");
 }
 
-/** Vencimento no dia `dueDay` do mesmo mês de referência da fatura (não no mês seguinte). */
-export function cardDueDateForStatement(statementMonthYm: string, dueDay: number): string {
+/**
+ * Vencimento da fatura no dia `dueDay`.
+ * Quando `dueDay` ≤ dia de fechamento, o vencimento cai no mês seguinte ao de referência
+ * (ex.: fecha dia 30 em jun/ → vence dia 07 em jul/).
+ */
+export function cardDueDateForStatement(
+  statementMonthYm: string,
+  dueDay: number,
+  closingDay: number,
+): string {
   const [y, m] = statementMonthYm.split("-").map(Number);
   if (!y || !m) return "";
   const statementStart = new Date(y, m - 1, 1);
-  const lastDay = endOfMonth(statementStart).getDate();
+  const dueMonthStart = dueDay <= closingDay ? addMonths(statementStart, 1) : statementStart;
+  const lastDay = endOfMonth(dueMonthStart).getDate();
   const day = Math.min(Math.max(1, dueDay), lastDay);
-  return format(new Date(y, m - 1, day), "yyyy-MM-dd");
+  return format(new Date(dueMonthStart.getFullYear(), dueMonthStart.getMonth(), day), "yyyy-MM-dd");
 }
 
 export type CardFundingSplitInput = {
@@ -1347,7 +1356,7 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
     let dueDate: string | null | undefined;
     if (p.paymentSourceType === "card" && p.closingDay != null && p.dueDay != null) {
       statementMonth = cardStatementMonth(p.purchaseDate, p.closingDay);
-      dueDate = cardDueDateForStatement(statementMonth, p.dueDay);
+      dueDate = cardDueDateForStatement(statementMonth, p.dueDay, p.closingDay);
     }
     movements.push({
       id: `purchase-${p.id}`,
@@ -1454,7 +1463,7 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
     let dueDate: string | null | undefined;
     if (r.paymentSourceType === "card" && r.closingDay != null && r.dueDay != null) {
       statementMonth = cardStatementMonth(d, r.closingDay);
-      dueDate = cardDueDateForStatement(statementMonth, r.dueDay);
+      dueDate = cardDueDateForStatement(statementMonth, r.dueDay, r.closingDay);
     }
     movements.push({
       id: `future-${r.id}`,
@@ -1643,7 +1652,7 @@ export async function getPurchaseDetailById(purchaseId: string, userId: string) 
     let dueDate: string | null = null;
     if (main.paymentSourceType === "card" && main.closingDay != null && main.dueDay != null) {
       statementMonth = cardStatementMonth(s.purchaseDate, main.closingDay);
-      dueDate = cardDueDateForStatement(statementMonth, main.dueDay);
+      dueDate = cardDueDateForStatement(statementMonth, main.dueDay, main.closingDay);
     }
     return {
       id: s.id,
