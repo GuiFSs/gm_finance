@@ -81,6 +81,7 @@ export const cardStatementFundingSplitInputSchema = z.object({
   targetType: z.enum(["account", "pocket"]),
   pocketId: z.string().optional(),
   amount: z.coerce.number().min(0),
+  purchaseId: z.string().optional(),
 });
 
 export const replaceCardStatementFundingSchema = z.object({

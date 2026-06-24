@@ -807,6 +807,7 @@ export type CardFundingSplitInput = {
   targetType: "account" | "pocket";
   pocketId?: string | null;
   amount: number;
+  purchaseId?: string | null;
 };
 
 export function formatCardFundingPlanLabel(
@@ -825,10 +826,45 @@ export function formatCardFundingPlanLabel(
     .join(" · ");
 }
 
-function assertValidCardFundingSplits(splits: CardFundingSplitInput[]) {
-  if (splits.length === 0) {
-    throw new Error("Informe pelo menos uma fonte para o pagamento da fatura.");
+function assertValidCardFundingSplits(
+  splits: CardFundingSplitInput[],
+  invoiceLines?: CardStatementInvoiceLine[]
+) {
+  if (splits.length === 0) return;
+
+  const hasPurchaseIds = splits.some((s) => s.purchaseId?.trim());
+  const allHavePurchaseIds = splits.every((s) => s.purchaseId?.trim());
+
+  if (hasPurchaseIds && !allHavePurchaseIds) {
+    throw new Error("Plano inválido: informe a fonte para cada compra da fatura.");
   }
+
+  if (allHavePurchaseIds) {
+    if (!invoiceLines?.length) {
+      throw new Error("Não há compras nesta fatura para planejar.");
+    }
+    if (splits.length !== invoiceLines.length) {
+      throw new Error("Informe a fonte para cada compra da fatura.");
+    }
+    const lineById = new Map(invoiceLines.map((l) => [l.id, l]));
+    for (const s of splits) {
+      const line = lineById.get(s.purchaseId!.trim());
+      if (!line) {
+        throw new Error("Uma das compras não pertence a esta fatura.");
+      }
+      if (Math.abs(s.amount - line.amount) > DEPOSIT_SUM_EPS) {
+        throw new Error("Valor inconsistente para uma das compras.");
+      }
+      if (s.amount < 0) {
+        throw new Error("Os valores não podem ser negativos.");
+      }
+      if (s.targetType === "pocket" && !s.pocketId?.trim()) {
+        throw new Error("Selecione a caixinha em cada compra que vem de caixinha.");
+      }
+    }
+    return;
+  }
+
   const sum = splits.reduce((a, s) => a + s.amount, 0);
   if (sum <= DEPOSIT_SUM_EPS) {
     throw new Error("A soma dos valores deve ser maior que zero.");
@@ -879,6 +915,7 @@ export type CardStatementFundingMonthRow = {
     pocketId: string | null;
     pocketName: string | null;
     amount: number;
+    purchaseId: string | null;
   }>;
 };
 
@@ -971,6 +1008,7 @@ export async function listCardStatementFundingByCard(
       id: schema.cardStatementFundingSplits.id,
       targetType: schema.cardStatementFundingSplits.targetType,
       pocketId: schema.cardStatementFundingSplits.pocketId,
+      purchaseId: schema.cardStatementFundingSplits.purchaseId,
       amount: schema.cardStatementFundingSplits.amount,
       sortOrder: schema.cardStatementFundingSplits.sortOrder,
       pocketName: schema.pockets.name,
@@ -989,6 +1027,7 @@ export async function listCardStatementFundingByCard(
       pocketId: r.pocketId,
       pocketName: r.pocketName,
       amount: r.amount,
+      purchaseId: r.purchaseId,
     });
     byMonth.set(r.statementMonth, list);
   }
@@ -1022,7 +1061,14 @@ export async function replaceCardStatementFunding(
     return;
   }
 
-  assertValidCardFundingSplits(splits);
+  const perPurchase = splits.every((s) => s.purchaseId?.trim());
+  let invoiceLines: CardStatementInvoiceLine[] | undefined;
+  if (perPurchase) {
+    const detail = await getCardStatementInvoiceDetail(cardId, statementMonth, userId);
+    invoiceLines = detail?.lines;
+  }
+
+  assertValidCardFundingSplits(splits, invoiceLines);
 
   await db.transaction(async (tx) => {
     await deleteSplitsForMonth(tx);
@@ -1033,6 +1079,7 @@ export async function replaceCardStatementFunding(
         statementMonth,
         targetType: s.targetType,
         pocketId: s.targetType === "pocket" ? s.pocketId! : null,
+        purchaseId: s.purchaseId?.trim() || null,
         amount: s.amount,
         sortOrder: idx,
         createdByUserId: userId,

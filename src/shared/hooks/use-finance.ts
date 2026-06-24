@@ -244,6 +244,7 @@ export type CardStatementFundingMonthApi = {
     pocketId: string | null;
     pocketName: string | null;
     amount: number;
+    purchaseId: string | null;
   }>;
 };
 
@@ -307,7 +308,12 @@ export function useReplaceCardStatementFunding() {
     mutationFn: (payload: {
       cardId: string;
       statementMonth: string;
-      splits: Array<{ targetType: "account" | "pocket"; pocketId?: string; amount: number }>;
+      splits: Array<{
+        targetType: "account" | "pocket";
+        pocketId?: string;
+        amount: number;
+        purchaseId?: string;
+      }>;
     }) =>
       fetcher(`/api/cards/${payload.cardId}/statement-funding`, {
         method: "PUT",

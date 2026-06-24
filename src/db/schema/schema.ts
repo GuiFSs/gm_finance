@@ -50,6 +50,8 @@ export const cardStatementFundingSplits = sqliteTable("card_statement_funding_sp
   statementMonth: text("statement_month").notNull(),
   targetType: text("target_type", { enum: depositTargetTypeEnum }).notNull(),
   pocketId: text("pocket_id").references(() => pockets.id),
+  /** Compra da fatura (quando o plano é por item). */
+  purchaseId: text("purchase_id").references(() => purchases.id, { onDelete: "cascade" }),
   /** Valor planejado a retirar desta fonte (R$). */
   amount: real("amount").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),

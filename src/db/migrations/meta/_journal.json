@@ -50,6 +50,13 @@
       "when": 1774312031841,
       "tag": "0006_card_funding_amount",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1774312031842,
+      "tag": "0007_card_funding_purchase",
+      "breakpoints": true
     }
   ]
 }
