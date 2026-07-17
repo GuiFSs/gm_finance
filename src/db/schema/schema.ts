@@ -1,9 +1,17 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  type AnySQLiteColumn,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const paymentSourceTypeEnum = ["account", "pocket", "card"] as const;
 export const adjustmentTargetTypeEnum = ["account", "pocket"] as const;
 export const depositTargetTypeEnum = ["account", "pocket"] as const;
+export const budgetAllocationModeEnum = ["percent", "amount"] as const;
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -246,6 +254,50 @@ export const goals = sqliteTable("goals", {
   deadline: text("deadline"),
 });
 
+/** Plano de orçamento mensal (um por mês no household). month = yyyy-MM. */
+export const monthlyBudgets = sqliteTable("monthly_budgets", {
+  id: text("id").primaryKey(),
+  month: text("month").notNull().unique(),
+  incomeAmount: real("income_amount").notNull(),
+  createdByUserId: text("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
+/** Alocações em árvore: raiz usa categoryId; filhos usam tagId. */
+export const budgetAllocations = sqliteTable(
+  "budget_allocations",
+  {
+    id: text("id").primaryKey(),
+    budgetId: text("budget_id")
+      .notNull()
+      .references(() => monthlyBudgets.id, { onDelete: "cascade" }),
+    parentId: text("parent_id").references((): AnySQLiteColumn => budgetAllocations.id, {
+      onDelete: "cascade",
+    }),
+    categoryId: text("category_id").references(() => categories.id),
+    tagId: text("tag_id").references(() => tags.id),
+    allocationMode: text("allocation_mode", { enum: budgetAllocationModeEnum }).notNull(),
+    percent: real("percent"),
+    amount: real("amount").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex("budget_allocations_budget_category_uq")
+      .on(t.budgetId, t.categoryId)
+      .where(sql`${t.categoryId} is not null`),
+    uniqueIndex("budget_allocations_budget_tag_uq")
+      .on(t.budgetId, t.tagId)
+      .where(sql`${t.tagId} is not null`),
+  ],
+);
+
 export const purchaseRelations = relations(purchases, ({ one, many }) => ({
   category: one(categories, {
     fields: [purchases.categoryId],
@@ -253,4 +305,30 @@ export const purchaseRelations = relations(purchases, ({ one, many }) => ({
   }),
   user: one(users, { fields: [purchases.createdByUserId], references: [users.id] }),
   tags: many(purchaseTags),
+}));
+
+export const monthlyBudgetRelations = relations(monthlyBudgets, ({ many, one }) => ({
+  allocations: many(budgetAllocations),
+  user: one(users, { fields: [monthlyBudgets.createdByUserId], references: [users.id] }),
+}));
+
+export const budgetAllocationRelations = relations(budgetAllocations, ({ one, many }) => ({
+  budget: one(monthlyBudgets, {
+    fields: [budgetAllocations.budgetId],
+    references: [monthlyBudgets.id],
+  }),
+  category: one(categories, {
+    fields: [budgetAllocations.categoryId],
+    references: [categories.id],
+  }),
+  tag: one(tags, {
+    fields: [budgetAllocations.tagId],
+    references: [tags.id],
+  }),
+  parent: one(budgetAllocations, {
+    fields: [budgetAllocations.parentId],
+    references: [budgetAllocations.id],
+    relationName: "allocation_tree",
+  }),
+  children: many(budgetAllocations, { relationName: "allocation_tree" }),
 }));

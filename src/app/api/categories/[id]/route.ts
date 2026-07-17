@@ -37,6 +37,15 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     const deleted = await db.transaction(async (tx) => {
+      const [used] = await tx
+        .select({ id: schema.budgetAllocations.id })
+        .from(schema.budgetAllocations)
+        .where(eq(schema.budgetAllocations.categoryId, id))
+        .limit(1);
+      if (used) {
+        throw new Error("Categoria em uso no orçamento. Remova-a do plano antes de excluir.");
+      }
+
       await tx.update(schema.purchases).set({ categoryId: null }).where(eq(schema.purchases.categoryId, id));
       await tx
         .update(schema.recurringExpenses)

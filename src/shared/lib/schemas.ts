@@ -264,3 +264,36 @@ export const createAdjustmentSchema = z.object({
   adjustmentDate: z.string().min(1),
   createdByUserId: z.string().min(1),
 });
+
+type BudgetAllocationNodeInput = {
+  id?: string;
+  categoryId?: string | null;
+  tagId?: string | null;
+  allocationMode: "percent" | "amount";
+  percent?: number | null;
+  amount?: number | null;
+  children?: BudgetAllocationNodeInput[];
+};
+
+const budgetAllocationNodeSchema: z.ZodType<BudgetAllocationNodeInput> = z.lazy(() =>
+  z.object({
+    id: z.string().optional(),
+    categoryId: z.string().nullable().optional(),
+    tagId: z.string().nullable().optional(),
+    allocationMode: z.enum(["percent", "amount"]),
+    percent: z.coerce.number().min(0).nullable().optional(),
+    amount: z.coerce.number().min(0).nullable().optional(),
+    children: z.array(budgetAllocationNodeSchema).optional().default([]),
+  }),
+);
+
+export const upsertMonthlyBudgetSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Mês inválido (yyyy-MM)"),
+  incomeAmount: z.coerce.number().min(0),
+  allocations: z.array(budgetAllocationNodeSchema).default([]),
+});
+
+export const copyMonthlyBudgetSchema = z.object({
+  fromMonth: z.string().regex(/^\d{4}-\d{2}$/, "Mês de origem inválido"),
+  toMonth: z.string().regex(/^\d{4}-\d{2}$/, "Mês de destino inválido"),
+});

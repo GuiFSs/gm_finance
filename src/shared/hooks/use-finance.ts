@@ -123,6 +123,7 @@ export function useCreatePurchase() {
       queryClient.invalidateQueries({ queryKey: ["purchases"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
     },
   });
 }
@@ -137,6 +138,7 @@ export function useUpdatePurchase() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
       queryClient.invalidateQueries({ queryKey: ["purchase", variables.purchaseId] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
     },
   });
 }
@@ -151,6 +153,7 @@ export function useDeletePurchase() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
       queryClient.removeQueries({ queryKey: ["purchase", purchaseId] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
     },
   });
 }
@@ -358,6 +361,7 @@ export function useUpdateCategory() {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
     },
   });
 }
@@ -374,6 +378,7 @@ export function useDeleteCategory() {
       queryClient.invalidateQueries({ queryKey: ["recurring"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
     },
   });
 }
@@ -602,6 +607,60 @@ export function useCreateAdjustment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["pockets"] });
+    },
+  });
+}
+
+export function useMonthlyBudget(month: string | null) {
+  return useQuery({
+    queryKey: ["budgets", month],
+    enabled: Boolean(month && /^\d{4}-\d{2}$/.test(month)),
+    queryFn: () =>
+      fetcher<{ data: import("@/entities/budget/model").MonthlyBudgetPayload }>(
+        `/api/budgets?month=${encodeURIComponent(month!)}`,
+      ),
+    select: (response) => response.data,
+  });
+}
+
+export function useUpsertMonthlyBudget() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      month: string;
+      incomeAmount: number;
+      allocations: Array<{
+        id?: string;
+        categoryId?: string | null;
+        tagId?: string | null;
+        allocationMode: "percent" | "amount";
+        percent?: number | null;
+        amount?: number | null;
+        children?: unknown[];
+      }>;
+    }) =>
+      fetcher<{ data: import("@/entities/budget/model").MonthlyBudgetPayload }>("/api/budgets", {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["budgets", variables.month] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useCopyMonthlyBudget() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { fromMonth: string; toMonth: string }) =>
+      fetcher<{ data: import("@/entities/budget/model").MonthlyBudgetPayload }>("/api/budgets", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["budgets", variables.toMonth] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

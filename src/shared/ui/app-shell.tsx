@@ -7,6 +7,7 @@ import {
   Landmark,
   LayoutDashboard,
   Menu,
+  PieChart,
   PiggyBank,
   ReceiptText,
   Repeat,
@@ -25,6 +26,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/shared/ui/sheet";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/movements", label: "Movimentos do mês", icon: CalendarDays },
+  { href: "/budgets", label: "Orçamento", icon: PieChart },
   { href: "/categories", label: "Categorias", icon: Tags },
   { href: "/purchases", label: "Compras", icon: ReceiptText },
   { href: "/pockets", label: "Caixinhas", icon: PiggyBank },
