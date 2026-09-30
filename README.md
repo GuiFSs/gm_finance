@@ -33,6 +33,12 @@ Required variables:
 - `JWT_SECRET`
 - `LOGIN_PIN` (backend-only login PIN)
 
+Optional — Web Push (alertas de vencimento):
+
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — gerar com `npx web-push generate-vapid-keys`
+- `VAPID_SUBJECT` — ex. `mailto:voce@exemplo.com`
+- `CRON_SECRET` — string longa aleatória para o job diário
+
 3. Run migrations:
 
 ```bash
@@ -45,7 +51,25 @@ npm run db:migrate
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:8080`.
+
+## Web Push — alertas hoje/amanhã
+
+O app envia **uma notificação por dia** (digest) com faturas de cartão, compras (conta/caixinha) e recorrentes que vencem **hoje ou amanhã**.
+
+1. Gere as chaves VAPID e preencha o `.env.local`.
+2. Faça deploy em produção (o service worker **não** roda em `next dev`).
+3. No dashboard, use **Ativar notificações** (no iOS: instalar o PWA na Tela de Início).
+4. Agende um cron gratuito (ex. [cron-job.org](https://cron-job.org)) diariamente ~08:00:
+
+```bash
+curl -X POST "https://SEU_HOST/api/notifications/due-soon" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+- Sem itens na janela: não envia.
+- Já enviado no dia: responde `already_sent` (use `?force=1` só para teste).
+- Endpoints 410/404 são removidos automaticamente.
 
 ## Default users
 

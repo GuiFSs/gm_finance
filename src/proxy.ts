@@ -3,12 +3,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/shared/lib/auth";
 import { SESSION_COOKIE_NAME } from "@/shared/lib/constants";
 
-const PUBLIC_ROUTES = ["/login", "/api/auth/login", "/api/auth/users"];
+const PUBLIC_ROUTES = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/users",
+  "/api/notifications/due-soon",
+  "/api/push/vapid-public-key",
+];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/_next") || pathname.startsWith("/favicon")) {
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname === "/sw.js" ||
+    pathname === "/site.webmanifest" ||
+    pathname.startsWith("/workbox-") ||
+    pathname.startsWith("/worker-") ||
+    pathname.startsWith("/icon-")
+  ) {
     return NextResponse.next();
   }
 

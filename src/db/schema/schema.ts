@@ -300,6 +300,38 @@ export const budgetAllocations = sqliteTable(
   ],
 );
 
+/** Subscriptions Web Push (VAPID) por dispositivo. */
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  endpoint: text("endpoint").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(unixepoch() * 1000)`),
+});
+
+/** Evita reenvio do digest due-soon no mesmo dia (cron duplicado). */
+export const notificationSends = sqliteTable(
+  "notification_sends",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    sendDate: text("send_date").notNull(),
+    digestHash: text("digest_hash"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => [uniqueIndex("notification_sends_kind_date_uq").on(t.kind, t.sendDate)],
+);
+
 export const purchaseRelations = relations(purchases, ({ one, many }) => ({
   category: one(categories, {
     fields: [purchases.categoryId],

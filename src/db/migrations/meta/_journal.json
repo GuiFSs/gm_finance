@@ -92,6 +92,13 @@
       "when": 1774312031847,
       "tag": "0012_fix_purchase_series_id",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1774312031848,
+      "tag": "0013_push_notifications",
+      "breakpoints": true
     }
   ]
 }

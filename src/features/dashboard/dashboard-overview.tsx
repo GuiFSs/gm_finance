@@ -6,6 +6,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner";
 
 import { MonthBudgetSummary } from "@/features/dashboard/month-budget-summary";
+import { EnablePushCard } from "@/features/notifications/enable-push";
 import { useCreateAdjustment, useCurrentUser, useDashboard } from "@/shared/hooks/use-app-data";
 import { formatCurrency, formatDisplayDate, toInputDate } from "@/shared/utils/formatters";
 import { Badge } from "@/shared/ui/badge";
@@ -50,6 +51,7 @@ export function DashboardOverview() {
   return (
     <div className="space-y-6">
       <MonthBudgetSummary />
+      <EnablePushCard />
 
       {isLoading || !data ? (
         <p className="text-sm text-muted-foreground">Carregando saldos...</p>
