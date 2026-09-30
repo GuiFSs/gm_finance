@@ -128,10 +128,6 @@ function MultiEntityFilter({
   );
 }
 
-function purchaseGroupKey(p: PurchaseRow) {
-  return `${p.title}\0${p.paymentSourceType}\0${p.paymentSourceId ?? ""}\0${p.installmentCount}`;
-}
-
 type PurchaseGroup = {
   key: string;
   detailPurchaseId: string;
@@ -146,16 +142,17 @@ type PurchaseGroup = {
   tags: string[];
 };
 
+/** Groups installment rows of the same purchase via seriesId — never by title. */
 function groupPurchases(rows: PurchaseRow[]): PurchaseGroup[] {
   const map = new Map<string, PurchaseRow[]>();
   for (const p of rows) {
-    const k = purchaseGroupKey(p);
+    const k = p.seriesId || p.id;
     const arr = map.get(k) ?? [];
     arr.push(p);
     map.set(k, arr);
   }
   const out: PurchaseGroup[] = [];
-  for (const [, groupRows] of map) {
+  for (const [seriesId, groupRows] of map) {
     groupRows.sort((a, b) => a.installmentNumber - b.installmentNumber);
     const first = groupRows[0]!;
     const last = groupRows[groupRows.length - 1]!;
@@ -163,7 +160,7 @@ function groupPurchases(rows: PurchaseRow[]): PurchaseGroup[] {
     const tagSet = new Set<string>();
     for (const r of groupRows) for (const t of r.tags) tagSet.add(t);
     out.push({
-      key: `${purchaseGroupKey(first)}-${first.id}`,
+      key: seriesId,
       detailPurchaseId: first.id,
       title: first.title,
       totalAmount,
@@ -491,7 +488,7 @@ export function PurchaseList() {
                 ? "Carregando…"
                 : grouped.length === 0
                   ? "Nenhum resultado"
-                  : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} agrupadas · toque para ver parcelas e datas`}
+                  : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} · toque para ver detalhes`}
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[220px]">

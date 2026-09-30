@@ -1,7 +1,1 @@
-Features para ter:
-- dashboard do mes atual
-- adicionar skills
-- adicionar rentabilidade das caixinhas
-- banco de dados dev
-
-fixes:
+pq reclama ao salvar orçamento (ser mais explicito?)

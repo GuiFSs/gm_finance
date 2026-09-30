@@ -78,6 +78,20 @@
       "when": 1774312031845,
       "tag": "0010_budget_allocation_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1774312031846,
+      "tag": "0011_purchase_series_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1774312031847,
+      "tag": "0012_fix_purchase_series_id",
+      "breakpoints": true
     }
   ]
 }

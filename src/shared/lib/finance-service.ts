@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { addMonths, endOfMonth, format, getDate, startOfMonth } from "date-fns";
 
 import { db, schema } from "@/db";
@@ -85,11 +85,13 @@ type DbExecutor = Pick<typeof db, "insert" | "delete" | "select" | "update">;
 async function insertPurchaseWithLedger(executor: DbExecutor, input: PurchaseInput) {
   const installments = Math.max(1, input.installmentCount);
   const purchaseDate = parseLocalDateYmd(input.purchaseDate);
+  const seriesId = crypto.randomUUID();
 
   const purchaseRows = Array.from({ length: installments }, (_, idx) => {
     const installmentDate = format(addMonths(purchaseDate, idx), "yyyy-MM-dd");
     return {
       id: crypto.randomUUID(),
+      seriesId,
       title: input.title,
       description: input.description,
       amount: Number((input.amount / installments).toFixed(2)),
@@ -149,10 +151,18 @@ export async function createPurchase(input: PurchaseInput) {
   await insertPurchaseWithLedger(db, input);
 }
 
+function purchaseGroupIds(detail: { id: string; installments: Array<{ id: string }> }, purchaseId: string): string[] {
+  const ids = new Set(detail.installments.map((i) => i.id));
+  ids.add(detail.id);
+  ids.add(purchaseId);
+  return [...ids];
+}
+
 export async function deletePurchaseGroup(purchaseId: string, userId: string): Promise<boolean> {
   const detail = await getPurchaseDetailById(purchaseId, userId);
   if (!detail) return false;
-  const ids = detail.installments.map((i) => i.id);
+  const ids = purchaseGroupIds(detail, purchaseId);
+  if (ids.length === 0) return false;
   await db.transaction(async (tx) => {
     await tx.delete(schema.purchaseTags).where(inArray(schema.purchaseTags.purchaseId, ids));
     await tx.delete(schema.accountEntries).where(
@@ -169,7 +179,8 @@ export async function deletePurchaseGroup(purchaseId: string, userId: string): P
 export async function updatePurchaseGroup(purchaseId: string, userId: string, input: PurchaseInput): Promise<boolean> {
   const detail = await getPurchaseDetailById(purchaseId, userId);
   if (!detail) return false;
-  const ids = detail.installments.map((i) => i.id);
+  const ids = purchaseGroupIds(detail, purchaseId);
+  if (ids.length === 0) return false;
   await db.transaction(async (tx) => {
     await tx.delete(schema.purchaseTags).where(inArray(schema.purchaseTags.purchaseId, ids));
     await tx.delete(schema.accountEntries).where(
@@ -543,6 +554,7 @@ export async function getPurchases(filters: {
   const purchaseRows = await db
     .select({
       id: schema.purchases.id,
+      seriesId: schema.purchases.seriesId,
       title: schema.purchases.title,
       description: schema.purchases.description,
       amount: schema.purchases.amount,
@@ -1590,6 +1602,7 @@ export async function getPurchaseDetailById(purchaseId: string, userId: string) 
   const row = await db
     .select({
       id: schema.purchases.id,
+      seriesId: schema.purchases.seriesId,
       title: schema.purchases.title,
       description: schema.purchases.description,
       amount: schema.purchases.amount,
@@ -1616,25 +1629,33 @@ export async function getPurchaseDetailById(purchaseId: string, userId: string) 
   const main = row[0];
   if (!main || main.createdByUserId !== userId) return null;
 
-  const siblingWhere = and(
-    eq(schema.purchases.title, main.title),
-    eq(schema.purchases.paymentSourceType, main.paymentSourceType),
-    eq(schema.purchases.installmentCount, main.installmentCount),
-    eq(schema.purchases.createdByUserId, main.createdByUserId),
-    main.paymentSourceId ? eq(schema.purchases.paymentSourceId, main.paymentSourceId) : isNull(schema.purchases.paymentSourceId)
-  );
+  const siblingsRaw = main.seriesId
+    ? await db
+        .select({
+          id: schema.purchases.id,
+          purchaseDate: schema.purchases.purchaseDate,
+          amount: schema.purchases.amount,
+          installmentNumber: schema.purchases.installmentNumber,
+          installmentCount: schema.purchases.installmentCount,
+        })
+        .from(schema.purchases)
+        .where(eq(schema.purchases.seriesId, main.seriesId))
+        .orderBy(asc(schema.purchases.installmentNumber))
+    : [];
 
-  const siblings = await db
-    .select({
-      id: schema.purchases.id,
-      purchaseDate: schema.purchases.purchaseDate,
-      amount: schema.purchases.amount,
-      installmentNumber: schema.purchases.installmentNumber,
-      installmentCount: schema.purchases.installmentCount,
-    })
-    .from(schema.purchases)
-    .where(siblingWhere)
-    .orderBy(asc(schema.purchases.installmentNumber));
+  /** series_id nulo ou órfão: ainda assim devolve a linha aberta (evita modal/delete vazios). */
+  const siblings =
+    siblingsRaw.length > 0
+      ? siblingsRaw
+      : [
+          {
+            id: main.id,
+            purchaseDate: main.purchaseDate,
+            amount: main.amount,
+            installmentNumber: main.installmentNumber,
+            installmentCount: main.installmentCount,
+          },
+        ];
 
   const totalAmount = siblings.reduce((sum, s) => sum + s.amount, 0);
   const firstPurchaseIdForTags = siblings[0]?.id;

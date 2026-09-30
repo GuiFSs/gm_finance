@@ -146,6 +146,8 @@ export const recurringExpenseTags = sqliteTable("recurring_expense_tags", {
 
 export const purchases = sqliteTable("purchases", {
   id: text("id").primaryKey(),
+  /** Shared by all installment rows of the same purchase; unique per purchase. */
+  seriesId: text("series_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
   amount: real("amount").notNull(),

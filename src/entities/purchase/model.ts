@@ -1,5 +1,6 @@
 export type Purchase = {
   id: string;
+  seriesId: string;
   title: string;
   description?: string | null;
   amount: number;

@@ -668,6 +668,7 @@ export function useCopyMonthlyBudget() {
 type NamedEntity = { id: string; name: string };
 export type PurchaseRow = {
   id: string;
+  seriesId: string;
   title: string;
   amount: number;
   purchaseDate: string;
