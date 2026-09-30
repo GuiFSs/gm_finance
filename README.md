@@ -93,9 +93,14 @@ PIN validation is backend-only and read from `LOGIN_PIN` env variable.
 
 - `/login`
 - `/dashboard`
+- `/movements`
 - `/purchases` and `/purchases/new`
 - `/pockets`
 - `/cards`
 - `/recurring`
 - `/goals`
 - `/deposits`
+- `/budgets`
+- `/categories`
+
+Note: `TELEGRAM_*` and `GROQ_*` in `.env.example` are reserved for future work — there is no Telegram/voice code in the app yet.

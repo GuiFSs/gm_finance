@@ -1,0 +1,35 @@
+---
+description: Sempre ler e atualizar o contexto de agentes após mudanças no código
+alwaysApply: true
+---
+
+# Documentar alterações para outros agentes
+
+Todo agente neste projeto **deve** manter o handoff em `.cursor/agent-context/` atualizado. Outros agentes leem isso para não se perderem.
+
+## Obrigatório
+
+1. **Antes de mudar código**: ler `.cursor/agent-context/CURRENT.md`. Em features grandes ou área desconhecida, ler também `APP.md`. Usar o topo de `LOG.md` se precisar de histórico.
+2. **Depois de mudanças relevantes** (arquivos criados/editados/removidos, decisões, APIs, schema, env, deploy): atualizar o contexto **na mesma sessão**, antes de encerrar.
+3. **Como documentar**: seguir a skill `.cursor/skills/document-changes/SKILL.md`.
+
+## O que conta como mudança relevante
+
+- Feature, bugfix, refactor, migration, API, schema, config, env vars, worker/PWA, auth
+- Decisão de arquitetura ou trade-off que afeta o próximo passo
+- Trabalho **parcial** (WIP): deixar explícito o que falta e o próximo passo
+
+## Não documentar
+
+- Typos, formatação só cosmética, ou perguntas sem alterar o repo
+- Segredos, tokens, conteúdo de `.env*`
+
+## Arquivos
+
+| Arquivo | Função |
+|---------|--------|
+| `.cursor/agent-context/CURRENT.md` | Estado vivo: o que mudou, por quê, próximo passo |
+| `.cursor/agent-context/APP.md` | Mapa estável: rotas, APIs, auth, gaps, deploy |
+| `.cursor/agent-context/LOG.md` | Histórico append-only (entradas curtas no topo) |
+
+Se `CURRENT.md` estiver desatualizado em relação ao working tree, **corrigir o CURRENT** antes de continuar a feature. Se rotas/APIs/gaps mudarem de forma permanente, atualizar `APP.md`.

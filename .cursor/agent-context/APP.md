@@ -1,0 +1,106 @@
+# Mapa da aplicação (agentes)
+
+> Visão estável do `gm_finance`. Atualizar quando rotas, APIs, decisões de arquitetura ou gaps mudarem de forma permanente. Estado operacional do dia a dia fica em `CURRENT.md`.
+
+App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: Next.js App Router, FSD, Turso/Drizzle, JWT cookie, Tailwind/shadcn, Zustand + TanStack Query.
+
+## Arquitetura
+
+| Camada | Path |
+|--------|------|
+| Rotas / API | `src/app`, `src/app/api` |
+| UI por caso de uso | `src/features` |
+| Domínio / tipos | `src/entities` |
+| Shared (UI, libs, hooks) | `src/shared` |
+| Schema + migrations | `src/db` |
+| Zustand UI | `src/store` |
+
+- Domínio financeiro central: `src/shared/lib/finance-service.ts`, orçamentos em `budget-service.ts`
+- Auth gate (Next 16): `src/proxy.ts` (não existe `middleware.ts`)
+- UI: regra shadcn → `src/shared/ui`; skill deploy → `.cursor/skills/vercel-production-deploy`
+
+## Auth
+
+- PIN único de env: `LOGIN_PIN` (backend). Coluna `users.pin` no seed é legado (`env-controlled`); login **não** compara pin do DB.
+- Seed automático em `GET /api/auth/users`: `user_guilherme`, `user_maryane`
+- Sessão: JWT em cookie `httpOnly` `gm_finance_session`
+- No login também disparam recorrentes/depósitos vencidos (`recurring` run)
+
+### Rotas públicas (`src/proxy.ts`)
+
+`/login`, `/api/auth/login`, `/api/auth/users`, `/api/notifications/due-soon`, `/api/push/vapid-public-key`, assets PWA (`/sw.js`, workbox, worker, manifest, ícones).
+
+## Páginas
+
+| Rota | Feature |
+|------|---------|
+| `/login` | `features/auth` |
+| `/dashboard` | `features/dashboard` + card push |
+| `/movements` | `features/movements` |
+| `/purchases`, `/purchases/new` | `features/purchases` |
+| `/pockets` | `features/pockets` |
+| `/cards` | `features/cards` (+ statement funding) |
+| `/recurring` | `features/recurring` |
+| `/goals` | `features/goals` |
+| `/deposits` | `features/deposits` (+ recurring deposits) |
+| `/budgets` | `features/budgets` |
+| `/categories` | `features/categories` |
+
+Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout.tsx`).
+
+## APIs (resumo)
+
+| Área | Endpoints |
+|------|-----------|
+| Auth | `login`, `logout`, `me`, `users` |
+| Dashboard / ledger | `GET /api/dashboard`, `POST /api/adjustments`, `GET /api/movements` |
+| Purchases | CRUD ` /api/purchases`, `[id]` |
+| Pockets | GET/POST, `PATCH [id]`, `POST transfer` — **sem DELETE** |
+| Cards | GET/POST, `PATCH [id]`, `statement-funding` — **sem DELETE** |
+| Recurring | CRUD + `POST /api/recurring/run` |
+| Deposits | CRUD deposits + CRUD `recurring-deposits` |
+| Goals | **só** GET/POST |
+| Budgets | GET/PUT/POST (`/api/budgets`) |
+| Categories | GET/POST + PATCH/DELETE `[id]` |
+| Tags | GET/POST — **sem PATCH/DELETE** |
+| Push | `GET vapid-public-key` (público), `POST/DELETE subscribe` (sessão) |
+| Cron digest | `POST /api/notifications/due-soon` (Bearer `CRON_SECRET`) |
+
+## Web Push (HEAD `ef2a560` — em produção)
+
+- Digest **1×/dia**: faturas/compras/recorrentes que vencem **hoje ou amanhã**
+- Libs: `web-push.ts`, `due-soon-digest.ts`
+- Migration: `0013_push_notifications.sql` → `push_subscriptions`, `notification_sends` (confirmar aplicada no Turso prod)
+- SW custom: `worker/index.js` via `@ducanh2912/next-pwa` — **desabilitado em `next dev`**
+- Env prod: `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (já configurados na Vercel)
+- Cron é **externo** (não há `vercel.json` Cron); ver README
+- `?force=1` só para teste; 410/404 removem subscription
+
+## Env
+
+**Obrigatório:** `DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SECRET`, `LOGIN_PIN`
+
+**Push/cron:** `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
+
+**No `.env.example` mas SEM código:** `TELEGRAM_*`, `GROQ_*` — futuras; **não implementar** a partir só do example.
+
+## Deploy (produção)
+
+- Repo `GuiFSs/gm_finance`, prod = push em `main` → Vercel
+- Migrations **manuais** contra Turso (`npm run db:migrate` **não** roda no deploy)
+- Skill: `.cursor/skills/vercel-production-deploy/SKILL.md`
+
+## Gaps conhecidos (produto)
+
+- Telegram bot / Groq STT+NL: não existem em `src/`
+- Goals: sem edit/delete
+- Cards / pockets: sem DELETE API
+- Tags: sem PATCH/DELETE
+- `ideias.md` na raiz: nota solta (não é spec oficial)
+
+## Convenções para agentes
+
+1. Ler `CURRENT.md` (estado) + este `APP.md` (mapa) antes de features grandes
+2. UI nova → shadcn MCP + `src/shared/ui`
+3. Após mudanças relevantes → skill `document-changes`
+4. Deploy prod → skill `vercel-production-deploy` + confirmação explícita do usuário
