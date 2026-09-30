@@ -280,16 +280,28 @@ const budgetAllocationNodeSchema: z.ZodType<BudgetAllocationNodeInput> = z.lazy(
     id: z.string().optional(),
     categoryId: z.string().nullable().optional(),
     tagId: z.string().nullable().optional(),
-    allocationMode: z.enum(["percent", "amount"]),
-    percent: z.coerce.number().min(0).nullable().optional(),
-    amount: z.coerce.number().min(0).nullable().optional(),
+    allocationMode: z.enum(["percent", "amount"], {
+      error: "Tipo de alocação inválido: use % ou R$.",
+    }),
+    percent: z.coerce
+      .number({ error: "Percentual inválido." })
+      .min(0, "Percentual não pode ser negativo.")
+      .nullable()
+      .optional(),
+    amount: z.coerce
+      .number({ error: "Valor inválido." })
+      .min(0, "Valor não pode ser negativo.")
+      .nullable()
+      .optional(),
     children: z.array(budgetAllocationNodeSchema).optional().default([]),
   }),
 );
 
 export const upsertMonthlyBudgetSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "Mês inválido (yyyy-MM)"),
-  incomeAmount: z.coerce.number().min(0),
+  incomeAmount: z.coerce
+    .number({ error: "Informe a renda mensal." })
+    .min(0, "A renda mensal não pode ser negativa."),
   allocations: z.array(budgetAllocationNodeSchema).default([]),
 });
 

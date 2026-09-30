@@ -78,7 +78,12 @@ export function BudgetPlanner() {
   const onSave = async () => {
     try {
       const payloadNodes = draftToPayload(nodes);
-      const { error } = flattenAndResolveTree(incomeAmount, payloadNodes);
+      const categoryById = Object.fromEntries((categories.data ?? []).map((c) => [c.id, c.name]));
+      const tagById = Object.fromEntries((tags.data ?? []).map((t) => [t.id, t.name]));
+      const { error } = flattenAndResolveTree(incomeAmount, payloadNodes, undefined, {
+        categoryById,
+        tagById,
+      });
       if (error) {
         toast.error(error);
         return;
@@ -149,8 +154,8 @@ export function BudgetPlanner() {
         </div>
 
         <p className="mt-2 text-sm text-muted-foreground">
-          Defina a renda de {formatYearMonthLabel(month)} e divida por categorias (por valor ou %).
-          Dentro de cada categoria, subdivida usando tags.
+          Defina a renda de {formatYearMonthLabel(month)} e divida por categorias — cada uma em valor
+          (R$) ou percentual (%). Dentro de cada categoria, subdivida usando tags.
         </p>
 
         {budgetQuery.isLoading ? (

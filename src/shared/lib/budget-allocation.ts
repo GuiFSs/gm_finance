@@ -1,4 +1,5 @@
 import { DEPOSIT_SUM_EPS, PERCENT_SUM_EPS, distributeAmountsByPercent } from "@/shared/lib/deposit-split";
+import { formatCurrency } from "@/shared/utils/formatters";
 import type {
   BudgetAllocationMode,
   BudgetAllocationNode,
@@ -11,6 +12,20 @@ export type SiblingInput = {
   percent?: number | null;
   amount?: number | null;
 };
+
+/** Mapas opcionais para citar nomes nas mensagens de erro ao salvar. */
+export type BudgetNameMaps = {
+  categoryById?: Record<string, string>;
+  tagById?: Record<string, string>;
+};
+
+function fmtPercent(value: number): string {
+  return `${Number(value.toFixed(2))}%`;
+}
+
+function withScope(scope: string | undefined, phrase: string): string {
+  return scope ? `${phrase} ${scope}` : phrase;
+}
 
 export type FlatAllocationRow = {
   id: string;
@@ -46,49 +61,111 @@ export function resolveSiblingAmounts(pool: number, rows: SiblingInput[]): numbe
   });
 }
 
-/** Valida um grupo de irmãos contra o pool. Retorna mensagem de erro em PT ou null. */
-export function validateSiblingGroup(pool: number, rows: SiblingInput[]): string | null {
+/**
+ * Valida um grupo de irmãos contra o pool.
+ * `scope` contextualiza o erro (ex.: "entre as categorias da renda").
+ */
+export function validateSiblingGroup(
+  pool: number,
+  rows: SiblingInput[],
+  scope?: string,
+): string | null {
   if (rows.length === 0) return null;
-  if (pool < 0) return "O valor base da divisão não pode ser negativo.";
+  if (pool < 0) {
+    return withScope(scope, "O valor base da divisão não pode ser negativo");
+  }
 
   const allPercent = rows.every((r) => r.allocationMode === "percent");
   if (allPercent) {
     const sumP = rows.reduce((a, r) => a + Number(r.percent ?? 0), 0);
     if (sumP - 100 > PERCENT_SUM_EPS) {
-      return "A soma dos percentuais não pode passar de 100%.";
+      const excess = Number((sumP - 100).toFixed(2));
+      return `${withScope(scope, "A soma dos percentuais")} é ${fmtPercent(sumP)} (máximo 100%). Reduza ${fmtPercent(excess)}.`;
     }
-    if (sumP < 0) return "Percentuais inválidos.";
+    if (sumP < 0) {
+      return `${withScope(scope, "Há percentuais inválidos")}. Use valores ≥ 0.`;
+    }
   }
 
   const amounts = resolveSiblingAmounts(pool, rows);
   const sum = amounts.reduce((a, v) => a + v, 0);
   if (sum - pool > DEPOSIT_SUM_EPS) {
-    return "A soma das alocações não pode passar do valor disponível.";
+    const excess = Number((sum - pool).toFixed(2));
+    return `${withScope(scope, "A soma das alocações")} é ${formatCurrency(sum)}, mas o disponível é ${formatCurrency(pool)}. Reduza ${formatCurrency(excess)}.`;
   }
-  for (const amount of amounts) {
-    if (amount < 0) return "Valores de alocação não podem ser negativos.";
-  }
-  return null;
-}
-
-export function assertUniqueRootCategoryIds(roots: { categoryId?: string | null }[]): string | null {
-  const seen = new Set<string>();
-  for (const node of roots) {
-    const id = node.categoryId?.trim();
-    if (!id) return "Selecione uma categoria em todas as divisões principais.";
-    if (seen.has(id)) return "A mesma categoria não pode aparecer mais de uma vez no orçamento.";
-    seen.add(id);
+  for (let i = 0; i < amounts.length; i++) {
+    const amount = amounts[i]!;
+    if (amount < 0) {
+      return `${withScope(scope, `O valor da linha ${i + 1} não pode ser negativo`)}.`;
+    }
   }
   return null;
 }
 
-export function assertUniqueTagIds(nodes: { tagId?: string | null }[]): string | null {
-  const seen = new Set<string>();
-  for (const node of nodes) {
-    const id = node.tagId?.trim();
-    if (!id) return "Selecione uma tag em todas as subdivisões.";
-    if (seen.has(id)) return "A mesma tag não pode aparecer mais de uma vez no orçamento.";
-    seen.add(id);
+export function assertUniqueRootCategoryIds(
+  roots: { categoryId?: string | null }[],
+  categoryById?: Record<string, string>,
+): string | null {
+  const missing: number[] = [];
+  const seen = new Map<string, number>();
+  for (let i = 0; i < roots.length; i++) {
+    const line = i + 1;
+    const id = roots[i]?.categoryId?.trim();
+    if (!id) {
+      missing.push(line);
+      continue;
+    }
+    const first = seen.get(id);
+    if (first != null) {
+      const name = categoryById?.[id];
+      return name
+        ? `A categoria "${name}" está duplicada (linhas ${first} e ${line}). Cada categoria só pode aparecer uma vez.`
+        : `Há categoria duplicada nas linhas ${first} e ${line}. Cada categoria só pode aparecer uma vez.`;
+    }
+    seen.set(id, line);
+  }
+  if (missing.length === 1) {
+    return `Selecione a categoria na divisão principal nº ${missing[0]}.`;
+  }
+  if (missing.length > 1) {
+    return `Selecione a categoria nas divisões principais nº ${missing.join(", ")}.`;
+  }
+  return null;
+}
+
+export function assertUniqueTagIds(
+  nodes: { tagId?: string | null }[],
+  options?: { tagById?: Record<string, string>; scope?: string },
+): string | null {
+  const missing: number[] = [];
+  const seen = new Map<string, number>();
+  const scope = options?.scope;
+  const tagById = options?.tagById;
+
+  for (let i = 0; i < nodes.length; i++) {
+    const line = i + 1;
+    const id = nodes[i]?.tagId?.trim();
+    if (!id) {
+      missing.push(line);
+      continue;
+    }
+    const first = seen.get(id);
+    if (first != null) {
+      const name = tagById?.[id];
+      const where = scope ? ` ${scope}` : "";
+      return name
+        ? `A tag "${name}" está duplicada${where} (linhas ${first} e ${line}). Cada tag só pode aparecer uma vez no orçamento.`
+        : `Há tag duplicada${where} nas linhas ${first} e ${line}. Cada tag só pode aparecer uma vez no orçamento.`;
+    }
+    seen.set(id, line);
+  }
+  if (missing.length === 1) {
+    const where = scope ? ` ${scope}` : "";
+    return `Selecione a tag na subdivisão nº ${missing[0]}${where}.`;
+  }
+  if (missing.length > 1) {
+    const where = scope ? ` ${scope}` : "";
+    return `Selecione a tag nas subdivisões nº ${missing.join(", ")}${where}.`;
   }
   return null;
 }
@@ -157,25 +234,69 @@ export type TreeInputNode = {
   children?: TreeInputNode[];
 };
 
-function validateTreeRefs(tree: TreeInputNode[]): string | null {
-  const uniqueCatErr = assertUniqueRootCategoryIds(tree);
+function nodeLabel(
+  node: TreeInputNode,
+  index: number,
+  isRoot: boolean,
+  names?: BudgetNameMaps,
+): string {
+  if (isRoot) {
+    const id = node.categoryId?.trim();
+    const name = id ? names?.categoryById?.[id] : undefined;
+    return name ? `"${name}"` : `categoria nº ${index + 1}`;
+  }
+  const id = node.tagId?.trim();
+  const name = id ? names?.tagById?.[id] : undefined;
+  return name ? `"${name}"` : `tag nº ${index + 1}`;
+}
+
+function validateTreeRefs(tree: TreeInputNode[], names?: BudgetNameMaps): string | null {
+  const uniqueCatErr = assertUniqueRootCategoryIds(tree, names?.categoryById);
   if (uniqueCatErr) return uniqueCatErr;
 
   const allTags: { tagId?: string | null }[] = [];
-  const walkChildren = (nodes: TreeInputNode[]) => {
-    for (const n of nodes) {
+  const walkChildren = (nodes: TreeInputNode[], parentLabel: string): string | null => {
+    if (nodes.length === 0) return null;
+    const localErr = assertUniqueTagIds(nodes, {
+      tagById: names?.tagById,
+      scope: `em ${parentLabel}`,
+    });
+    if (localErr) return localErr;
+
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i]!;
       allTags.push({ tagId: n.tagId });
-      if (n.children?.length) walkChildren(n.children);
+      const children = n.children ?? [];
+      if (children.length > 0) {
+        const childErr = walkChildren(children, nodeLabel(n, i, false, names));
+        if (childErr) return childErr;
+      }
     }
+    return null;
   };
 
-  for (const root of tree) {
-    if (root.children?.length) walkChildren(root.children);
+  for (let i = 0; i < tree.length; i++) {
+    const root = tree[i]!;
+    const children = root.children ?? [];
+    if (children.length === 0) continue;
+    const childErr = walkChildren(children, nodeLabel(root, i, true, names));
+    if (childErr) return childErr;
   }
 
-  if (allTags.length > 0) {
-    const uniqueTagErr = assertUniqueTagIds(allTags);
-    if (uniqueTagErr) return uniqueTagErr;
+  // Unicidade global de tags (além da checagem por grupo)
+  if (allTags.length > 1) {
+    const seen = new Map<string, true>();
+    for (const t of allTags) {
+      const id = t.tagId?.trim();
+      if (!id) continue;
+      if (seen.has(id)) {
+        const name = names?.tagById?.[id];
+        return name
+          ? `A tag "${name}" aparece mais de uma vez no orçamento. Cada tag só pode ser usada uma vez.`
+          : "A mesma tag aparece mais de uma vez no orçamento. Cada tag só pode ser usada uma vez.";
+      }
+      seen.set(id, true);
+    }
   }
   return null;
 }
@@ -188,8 +309,9 @@ export function flattenAndResolveTree(
   incomeAmount: number,
   tree: TreeInputNode[],
   makeId: () => string = () => crypto.randomUUID(),
+  names?: BudgetNameMaps,
 ): { rows: FlattenedInsert[]; error: string | null } {
-  const refErr = validateTreeRefs(tree);
+  const refErr = validateTreeRefs(tree, names);
   if (refErr) return { rows: [], error: refErr };
 
   const rows: FlattenedInsert[] = [];
@@ -199,6 +321,7 @@ export function flattenAndResolveTree(
     nodes: TreeInputNode[],
     parentId: string | null,
     isRoot: boolean,
+    scope: string,
   ): string | null => {
     if (nodes.length === 0) return null;
     const err = validateSiblingGroup(
@@ -208,6 +331,7 @@ export function flattenAndResolveTree(
         percent: n.percent,
         amount: n.amount,
       })),
+      scope,
     );
     if (err) return err;
 
@@ -242,14 +366,18 @@ export function flattenAndResolveTree(
 
       const children = node.children ?? [];
       if (children.length > 0) {
-        const childErr = resolveGroup(amount, children, id, false);
+        const parentName = nodeLabel(node, i, isRoot, names);
+        const childScope = isRoot
+          ? `entre as tags de ${parentName}`
+          : `entre as subdivisões de ${parentName}`;
+        const childErr = resolveGroup(amount, children, id, false, childScope);
         if (childErr) return childErr;
       }
     }
     return null;
   };
 
-  const error = resolveGroup(incomeAmount, tree, null, true);
+  const error = resolveGroup(incomeAmount, tree, null, true, "entre as categorias da renda");
   return { rows, error };
 }
 

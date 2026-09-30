@@ -159,7 +159,7 @@ export async function upsertMonthlyBudget(input: {
 }): Promise<MonthlyBudgetPayload> {
   const month = assertMonth(input.month);
   const incomeAmount = Number(input.incomeAmount);
-  if (incomeAmount < 0) throw new Error("A renda mensal não pode ser negativa.");
+  if (incomeAmount < 0) throw new Error("A renda mensal não pode ser negativa. Informe um valor ≥ R$ 0,00.");
 
   const { rows, error } = flattenAndResolveTree(incomeAmount, input.allocations ?? []);
   if (error) throw new Error(error);
@@ -171,7 +171,13 @@ export async function upsertMonthlyBudget(input: {
       .from(schema.categories)
       .where(inArray(schema.categories.id, categoryIds));
     if (existing.length !== categoryIds.length) {
-      throw new Error("Uma ou mais categorias não existem.");
+      const found = new Set(existing.map((r) => r.id));
+      const missing = categoryIds.filter((id) => !found.has(id));
+      throw new Error(
+        missing.length === 1
+          ? "Uma categoria selecionada não existe mais. Remova-a ou escolha outra e tente salvar de novo."
+          : `${missing.length} categorias selecionadas não existem mais. Remova-as ou escolha outras e tente salvar de novo.`,
+      );
     }
   }
 
@@ -182,7 +188,13 @@ export async function upsertMonthlyBudget(input: {
       .from(schema.tags)
       .where(inArray(schema.tags.id, tagIds));
     if (existing.length !== tagIds.length) {
-      throw new Error("Uma ou mais tags não existem.");
+      const found = new Set(existing.map((r) => r.id));
+      const missing = tagIds.filter((id) => !found.has(id));
+      throw new Error(
+        missing.length === 1
+          ? "Uma tag selecionada não existe mais. Remova-a ou escolha outra e tente salvar de novo."
+          : `${missing.length} tags selecionadas não existem mais. Remova-as ou escolha outras e tente salvar de novo.`,
+      );
     }
   }
 
