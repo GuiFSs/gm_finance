@@ -22,16 +22,15 @@ Espelho de `.env.example`. Em produção (Vercel), configurar **todas as require
 | `VAPID_SUBJECT` | Ex.: `mailto:…` |
 | `CRON_SECRET` | Bearer do cron diário `POST /api/notifications/due-soon` |
 
-### Optional — Telegram / Groq
+### Optional — voz (Gemini) / Telegram backlog
 
 | Variável | Notas |
 |----------|--------|
-| `TELEGRAM_BOT_TOKEN` | |
-| `TELEGRAM_WEBHOOK_SECRET` | |
-| `TELEGRAM_ALLOWED_CHATS` | Formato no `.env.example` |
-| `GROQ_API_KEY` | |
-| `GROQ_WHISPER_MODEL` | default no example |
-| `GROQ_LLM_MODEL` | default no example |
+| `GEMINI_API_KEY` | Parse de despesa por voz (`POST /api/purchases/parse-voice`) |
+| `GEMINI_MODEL` | Default `gemini-3.5-flash-lite` |
+| `TELEGRAM_BOT_TOKEN` | Backlog — sem código ainda |
+| `TELEGRAM_WEBHOOK_SECRET` | Backlog |
+| `TELEGRAM_ALLOWED_CHATS` | Backlog; formato no `.env.example` |
 
 **Nunca** colar valores secretos no chat, commits ou logs da skill. Ao auditar env, falar só dos **nomes** presentes/ausentes.
 

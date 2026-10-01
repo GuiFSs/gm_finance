@@ -54,7 +54,7 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 |------|-----------|
 | Auth | `login`, `logout`, `me`, `users` |
 | Dashboard / ledger | `GET /api/dashboard`, `POST /api/adjustments`, `GET /api/movements` |
-| Purchases | CRUD ` /api/purchases`, `[id]` |
+| Purchases | CRUD `/api/purchases`, `[id]`; `POST /api/purchases/parse-voice` (Gemini) |
 | Pockets | GET/POST, `PATCH [id]`, `POST transfer` — **sem DELETE** |
 | Cards | GET/POST, `PATCH [id]`, `statement-funding` — **sem DELETE** |
 | Recurring | CRUD + `POST /api/recurring/run` |
@@ -82,7 +82,9 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 
 **Push/cron:** `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
 
-**No `.env.example` mas SEM código:** `TELEGRAM_*`, `GROQ_*` — futuras; **não implementar** a partir só do example.
+**Voz (despesa):** `GEMINI_API_KEY` (obrigatória para parse), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`)
+
+**No `.env.example` mas SEM código:** `TELEGRAM_*` — backlog; **não implementar** a partir só do example.
 
 ## Deploy (produção)
 
@@ -92,11 +94,41 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 
 ## Gaps conhecidos (produto)
 
-- Telegram bot / Groq STT+NL: não existem em `src/`
+- Telegram bot: não existe em `src/` (env reservado)
 - Goals: sem edit/delete
 - Cards / pockets: sem DELETE API
 - Tags: sem PATCH/DELETE
 - `ideias.md` na raiz: nota solta (não é spec oficial)
+
+## Voz — despesa (implementado)
+
+Feature estável para agentes. **Não** reintroduzir Web Speech / Groq Whisper / WhatsApp sem pedido explícito.
+
+### Fluxo UX
+
+1. `/purchases` → **Nova despesa** → botão **Falar** (só modo criação; não em edição)
+2. Gravação com `MediaRecorder` + `getUserMedia`
+3. **Parar** — descarta áudio; **Enviar** — para e manda ao servidor (máx. ~30s)
+4. Gemini devolve campos → `reset` do `PurchaseForm` → usuário confirma e salva via `POST /api/purchases` existente
+
+### Backend
+
+- `POST /api/purchases/parse-voice` — sessão obrigatória; body JSON `{ audioBase64, mimeType }` (ou `{ transcript }` legado/teste)
+- Lib: `src/shared/lib/gemini-parse-purchase.ts` — carrega pockets/cards/categories/tags, chama Gemini `generateContent` multimodal, valida Zod, sanitiza IDs
+- Schema Gemini: tipos `STRING`/`NUMBER`/`INTEGER`/`ARRAY`/`OBJECT` + `nullable: true` — **não** usar `type: ["string","null"]` nem `additionalProperties` (API rejeita)
+- Default model: `gemini-3.5-flash-lite` via `GEMINI_MODEL`
+
+### Arquivos
+
+| Path | Papel |
+|------|--------|
+| `src/features/purchases/purchase-form.tsx` | UI Falar / Parar / Enviar |
+| `src/app/api/purchases/parse-voice/route.ts` | Route handler |
+| `src/shared/lib/gemini-parse-purchase.ts` | Prompt + Gemini + sanitize |
+
+### Env prod
+
+Antes de publicar: `GEMINI_API_KEY` (e opcionalmente `GEMINI_MODEL`) na Vercel.
 
 ## Convenções para agentes
 

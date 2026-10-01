@@ -273,7 +273,6 @@ export function PurchaseList() {
   const isLoading = purchases.isLoading;
 
   const grouped = useMemo(() => sortPurchaseGroups(groupPurchases(list), sortKey), [list, sortKey]);
-  const purchasesTotal = useMemo(() => grouped.reduce((s, g) => s + g.totalAmount, 0), [grouped]);
 
   return (
     <div className="space-y-6">
@@ -313,22 +312,6 @@ export function PurchaseList() {
           </Button>
         </div>
       </div>
-
-      {!isLoading ? (
-        <Card className="border-primary/20 bg-primary/5 shadow-sm">
-          <CardContent className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Total das despesas</p>
-              <p className="text-xs text-muted-foreground">
-                {hasActiveFilters ? "Soma do que aparece com os filtros atuais." : "Soma de todas as despesas listadas."}
-              </p>
-            </div>
-            <p className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-              {formatCurrency(purchasesTotal)}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
 
       <Modal
         open={openPurchaseModal}

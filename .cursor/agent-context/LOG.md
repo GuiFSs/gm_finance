@@ -2,6 +2,48 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-10-01 — release voz em produção
+
+- Status: `estável`
+- Resumo: Commit + push `main` da despesa por voz; `GEMINI_API_KEY`/`GEMINI_MODEL` na Vercel.
+- Arquivos-chave: `purchase-form.tsx`, `parse-voice/route.ts`, `gemini-parse-purchase.ts`
+- Próximo: smoke Falar/Enviar em prod
+
+## 2026-10-01 — docs voz para agentes
+
+- Status: `estável`
+- Resumo: README e APP.md documentam despesa por voz (MediaRecorder + Gemini, Parar/Enviar, schema, arquivos).
+- Arquivos-chave: `README.md`, `.cursor/agent-context/APP.md`, `CURRENT.md`
+- Próximo: commit quando o usuário pedir
+
+## 2026-10-01 — voz Gemini OK (validado)
+
+- Status: `pronto-para-revisar`
+- Resumo: Usuário confirmou que áudio preenche despesas bem; schema Gemini corrigido; UX Parar/Enviar.
+- Arquivos-chave: `purchase-form.tsx`, `gemini-parse-purchase.ts`
+- Próximo: commit / env prod se for publicar
+
+## 2026-10-01 — voz: MediaRecorder + Gemini (fix network)
+
+- Status: `pronto-para-revisar`
+- Resumo: Web Speech gerava `network`; passou a gravar áudio e enviar ao Gemini para parse.
+- Arquivos-chave: `purchase-form.tsx`, `gemini-parse-purchase.ts`, `parse-voice/route.ts`
+- Próximo: retestar Falar no Chrome
+
+## 2026-10-01 — despesa por voz (Web Speech + Gemini)
+
+- Status: `pronto-para-revisar`
+- Resumo: Botão Falar em Nova despesa; STT no browser; parse via Gemini; form preenchido para confirmar e salvar.
+- Arquivos-chave: `purchase-form.tsx`, `api/purchases/parse-voice/route.ts`, `gemini-parse-purchase.ts`
+- Próximo: configurar `GEMINI_API_KEY` e testar no Chrome
+
+## 2026-10-01 — removeu total das despesas
+
+- Status: `pronto-para-revisar`
+- Resumo: Removido o card “Total das despesas” (soma agregada) da lista em `purchase-list.tsx`.
+- Arquivos-chave: `src/features/purchases/purchase-list.tsx`
+- Próximo: validar visualmente a tela de despesas
+
 ## 2026-09-30 — docs de agentes no git
 
 - Status: `estável`

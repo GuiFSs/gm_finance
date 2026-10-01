@@ -39,6 +39,11 @@ Optional — Web Push (alertas de vencimento):
 - `VAPID_SUBJECT` — ex. `mailto:voce@exemplo.com`
 - `CRON_SECRET` — string longa aleatória para o job diário
 
+Optional — despesa por voz (MediaRecorder + Gemini):
+
+- `GEMINI_API_KEY` — chave em [Google AI Studio](https://aistudio.google.com/apikey)
+- `GEMINI_MODEL` — default `gemini-3.5-flash-lite` (não usar `gemini-2.0-flash`, descontinuado)
+
 3. Run migrations:
 
 ```bash
@@ -103,4 +108,15 @@ PIN validation is backend-only and read from `LOGIN_PIN` env variable.
 - `/budgets`
 - `/categories`
 
-Note: `TELEGRAM_*` and `GROQ_*` in `.env.example` are reserved for future work — there is no Telegram/voice code in the app yet.
+## Despesa por voz
+
+No dialog **Nova despesa** (`PurchaseForm`):
+
+1. **Falar** — inicia gravação (`MediaRecorder` + microfone)
+2. **Parar** — descarta o áudio
+3. **Enviar** — envia o áudio para `POST /api/purchases/parse-voice`; Gemini preenche o formulário
+4. Usuário revisa e salva com o fluxo normal (`POST /api/purchases`)
+
+Não usa Web Speech API (erro `network` frequente no Chrome). Requer `GEMINI_API_KEY`. Detalhes para agentes: `.cursor/agent-context/APP.md` (seção Voz).
+
+Note: `TELEGRAM_*` in `.env.example` remains backlog — no Telegram bot code yet.

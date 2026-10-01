@@ -1,8 +1,8 @@
 "use client";
 
 import { addMonths, format } from "date-fns";
-import { Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Loader2, Mic, Plus, Send, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
@@ -22,6 +22,7 @@ import {
   usePurchaseDetail,
   useUpdatePurchase,
 } from "@/shared/hooks/use-app-data";
+import { fetcher } from "@/shared/lib/fetcher";
 import { formatCurrency, formatDisplayDate, parseLocalDateYmd, toInputDate } from "@/shared/utils/formatters";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -30,6 +31,50 @@ import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SelectOptions } from "@/shared/ui/select-options";
+
+type VoiceParseResponse = {
+  data: {
+    title: string;
+    description: string;
+    amount: number | null;
+    purchaseDate: string;
+    categoryId: string;
+    paymentSourceType: "account" | "pocket" | "card";
+    paymentSourceId: string;
+    installmentCount: number;
+    tagNames: string[];
+  };
+};
+
+type VoiceUiState = "idle" | "listening" | "parsing";
+
+const MAX_VOICE_MS = 30_000;
+
+function pickRecorderMimeType(): string {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Falha ao ler áudio"));
+        return;
+      }
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64 ?? "");
+    };
+    reader.onerror = () => reject(new Error("Falha ao ler áudio"));
+    reader.readAsDataURL(blob);
+  });
+}
 
 const schema = z.object({
   title: z.string().min(1),
@@ -150,6 +195,32 @@ function PurchaseFormFields({
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [tagsField, setTagsField] = useState("");
+  const [voiceState, setVoiceState] = useState<VoiceUiState>("idle");
+  const [voiceFillKey, setVoiceFillKey] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceStateRef = useRef<VoiceUiState>("idle");
+  /** Se true, o próximo `onstop` descarta o áudio sem enviar. */
+  const discardRecordingRef = useRef(false);
+
+  const setVoiceUi = (next: VoiceUiState) => {
+    voiceStateRef.current = next;
+    setVoiceState(next);
+  };
+
+  const stopMediaTracks = () => {
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+  };
+
+  const clearVoiceTimer = () => {
+    if (voiceTimerRef.current) {
+      clearTimeout(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     if (!purchaseId || !detail.data) return;
@@ -168,6 +239,161 @@ function PurchaseFormFields({
     reset(EMPTY_FORM_VALUES());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deps intencionais
   }, [purchaseId]);
+
+  useEffect(() => {
+    return () => {
+      discardRecordingRef.current = true;
+      clearVoiceTimer();
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      stopMediaTracks();
+    };
+  }, []);
+
+  const applyVoiceParseResult = (d: VoiceParseResponse["data"]) => {
+    const tagIds = (tags.data ?? [])
+      .filter((t) => d.tagNames.some((n) => n.toLowerCase() === t.name.toLowerCase()))
+      .map((t) => t.id);
+
+    reset({
+      title: d.title,
+      description: d.description ?? "",
+      amount: d.amount != null && d.amount > 0 ? d.amount : 0,
+      purchaseDate: d.purchaseDate || toInputDate(new Date()),
+      categoryId: d.categoryId ?? "",
+      paymentSourceType: d.paymentSourceType,
+      paymentSourceId: d.paymentSourceType === "account" ? "" : (d.paymentSourceId ?? ""),
+      installmentCount: d.installmentCount || 1,
+      tagIds,
+    });
+    setTagsField(d.tagNames.join(", "));
+    setVoiceFillKey((k) => k + 1);
+
+    if (d.amount == null || d.amount <= 0) {
+      toast.message("Revise o formulário", {
+        description: "Não entendi o valor — complete e salve.",
+      });
+    } else {
+      toast.success("Despesa interpretada — revise e salve");
+    }
+  };
+
+  const parseRecordedAudio = async (blob: Blob, mimeType: string) => {
+    setVoiceUi("parsing");
+    try {
+      if (blob.size < 500) {
+        toast.error("Gravação muito curta — tente de novo");
+        setVoiceUi("idle");
+        return;
+      }
+      const audioBase64 = await blobToBase64(blob);
+      const res = await fetcher<VoiceParseResponse>("/api/purchases/parse-voice", {
+        method: "POST",
+        body: JSON.stringify({
+          audioBase64,
+          mimeType: mimeType.split(";")[0] || "audio/webm",
+        }),
+      });
+      applyVoiceParseResult(res.data);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao interpretar a fala");
+    } finally {
+      setVoiceUi("idle");
+    }
+  };
+
+  const finishRecorder = (mode: "send" | "discard") => {
+    clearVoiceTimer();
+    discardRecordingRef.current = mode === "discard";
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+      return;
+    }
+    chunksRef.current = [];
+    stopMediaTracks();
+    setVoiceUi("idle");
+  };
+
+  const cancelRecording = () => {
+    if (voiceStateRef.current !== "listening") return;
+    finishRecorder("discard");
+    toast.message("Gravação cancelada");
+  };
+
+  const sendRecording = () => {
+    if (voiceStateRef.current !== "listening") return;
+    finishRecorder("send");
+  };
+
+  const startRecording = async () => {
+    if (voiceStateRef.current !== "idle") return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      toast.error("Gravação de áudio não disponível neste browser");
+      return;
+    }
+
+    const mimeType = pickRecorderMimeType();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      chunksRef.current = [];
+      discardRecordingRef.current = false;
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      const usedMime = recorder.mimeType || mimeType || "audio/webm";
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        clearVoiceTimer();
+        chunksRef.current = [];
+        stopMediaTracks();
+        setVoiceUi("idle");
+        toast.error("Erro ao gravar áudio");
+      };
+
+      recorder.onstop = () => {
+        clearVoiceTimer();
+        stopMediaTracks();
+        mediaRecorderRef.current = null;
+        const shouldDiscard = discardRecordingRef.current;
+        discardRecordingRef.current = false;
+        const blob = new Blob(chunksRef.current, { type: usedMime });
+        chunksRef.current = [];
+
+        if (shouldDiscard) {
+          setVoiceUi("idle");
+          return;
+        }
+        void parseRecordedAudio(blob, usedMime);
+      };
+
+      recorder.start();
+      setVoiceUi("listening");
+      voiceTimerRef.current = setTimeout(() => {
+        if (voiceStateRef.current === "listening") finishRecorder("send");
+      }, MAX_VOICE_MS);
+    } catch (error) {
+      stopMediaTracks();
+      setVoiceUi("idle");
+      const name = error instanceof DOMException ? error.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        toast.error("Permissão de microfone negada");
+        return;
+      }
+      toast.error("Não foi possível iniciar o microfone");
+    }
+  };
 
   const paymentSourceType = useWatch({ control: form.control, name: "paymentSourceType" }) ?? "account";
   const paymentSourceId = useWatch({ control: form.control, name: "paymentSourceId" });
@@ -260,11 +486,62 @@ function PurchaseFormFields({
 
   const isSaving = createPurchase.isPending || updatePurchase.isPending;
 
-  /** Remonta os Select quando os valores iniciais da despesa mudam (edição). */
-  const selectHydrationKey = `${initialValues.paymentSourceType}-${initialValues.paymentSourceId}-${initialValues.categoryId}-${initialValues.purchaseDate}`;
+  /** Remonta os Select quando os valores iniciais da despesa mudam (edição) ou após preenchimento por voz. */
+  const selectHydrationKey = `${initialValues.paymentSourceType}-${initialValues.paymentSourceId}-${initialValues.categoryId}-${initialValues.purchaseDate}-v${voiceFillKey}`;
 
   const formContent = (
     <form onSubmit={submit} className={onSuccess ? "space-y-5" : "space-y-8"}>
+      {!purchaseId ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/25 p-3 dark:bg-muted/15">
+          <p className="text-sm text-muted-foreground">
+            {voiceState === "listening"
+              ? "Gravando… Use Enviar para interpretar ou Parar para descartar (máx. 30s)."
+              : voiceState === "parsing"
+                ? "Interpretando o áudio…"
+                : "Toque em Falar, diga a despesa e depois Enviar. O formulário será preenchido para você revisar."}
+          </p>
+          {voiceState === "listening" ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full gap-2 sm:w-auto"
+                onClick={cancelRecording}
+              >
+                <X className="h-4 w-4" />
+                Parar
+              </Button>
+              <Button type="button" className="h-11 w-full gap-2 sm:w-auto" onClick={sendRecording}>
+                <Send className="h-4 w-4" />
+                Enviar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-11 w-full gap-2 sm:w-auto"
+                onClick={() => void startRecording()}
+                disabled={voiceState === "parsing"}
+              >
+                {voiceState === "parsing" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Interpretando…
+                  </>
+                ) : (
+                  <>
+                    <Mic className="h-4 w-4" />
+                    Falar
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
+
       <FormSection title="Sobre a despesa" description="Nome e detalhes opcionais.">
         <div className="space-y-4">
           <div>

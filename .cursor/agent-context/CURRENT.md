@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-09-30 — versionar handoff de agentes + README rotas
+> Atualizado: 2026-10-01 — despesa por voz em produção
 
 ## Status
 
@@ -8,34 +8,33 @@
 
 ## Objetivo recente
 
-Versionar docs de handoff (`.cursor/agent-context`, regra/skill) e alinhar README às rotas; push due-soon já em produção.
+Publicar a feature de despesa por voz (MediaRecorder + Gemini) em produção, com env `GEMINI_*` na Vercel.
 
 ## O que mudou
 
-- Produção Vercel: deployment Ready; código alinhado a `ef2a560` em `main`
-- Env de produção presentes (nomes): `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` (+ DB/JWT/PIN já existentes)
-- Docs de agentes commitados: `APP.md`, `CURRENT.md`, `LOG.md`, regra `document-agent-changes`, skill `document-changes`
-- README: rotas `/movements`, `/budgets`, `/categories` + nota Telegram/Groq reservados
+- `purchase-form.tsx` — UI Falar / Parar / Enviar (gravação MediaRecorder)
+- `POST /api/purchases/parse-voice` + `gemini-parse-purchase.ts` — parse multimodal Gemini
+- `purchase-list.tsx` — removido card “Total das despesas”
+- Docs: `README.md`, `APP.md`, skill deploy reference
+- Prod: `GEMINI_API_KEY` e `GEMINI_MODEL` adicionadas na Vercel (Production/Preview/Development)
 
 ## Decisões
 
-- Prod = push em `main` → Vercel; migrate Turso continua **manual** (não no build)
-- Cron digest continua **externo** (não Vercel Cron)
-- Telegram/Groq ainda não implementados
+- Áudio no client → Gemini no server (sem Web Speech / Groq)
+- Sem migration nova neste release
+- Lint local tem erros pré-existentes em budgets/cards/purchases (setState-in-effect); build Next ok
 
 ## Ainda aberto / próximo passo
 
-- [ ] Confirmar que migration `0013_push_notifications.sql` rodou no Turso de **produção**
-- [ ] Confirmar cron diário apontando para `POST /api/notifications/due-soon` com Bearer `CRON_SECRET`
-- [ ] Smoke test: “Ativar notificações” no PWA/prod + (opcional) `?force=1` no cron
-- [ ] Produto (backlog): goals edit/delete; DELETE cards/pockets; tags PATCH/DELETE; Telegram/Groq
+- [ ] Smoke em prod: login → Nova despesa → Falar → Enviar → form preenchido
+- [ ] Backlog: goals edit/delete; DELETE cards/pockets; tags PATCH/DELETE; Telegram
 
 ## Como validar
 
-- Dashboard em prod → **Ativar notificações** (iOS: app na Tela de Início)
-- `GET /api/push/vapid-public-key` sem 503
-- Cron: `POST /api/notifications/due-soon` com Bearer → JSON ok / `already_sent` / sem envio se janela vazia
+1. `/login` em produção
+2. `/purchases` → Nova despesa → Falar (mic) → Enviar → revisar campos → salvar
+3. Sem `GEMINI_API_KEY`: API deve responder 503
 
 ## Áreas tocadas
 
-Produção Vercel `gm-finance`; `.cursor/agent-context/*`; push stack já em HEAD (`notifications`, `api/push`, migration `0013`, `worker/index.js`)
+`src/features/purchases`, `src/app/api/purchases/parse-voice`, `src/shared/lib/gemini-parse-purchase.ts`, docs agentes, Vercel env
