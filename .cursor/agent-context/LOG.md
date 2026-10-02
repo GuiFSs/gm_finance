@@ -2,6 +2,34 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-10-01 — release voz multi-intent em produção
+
+- Status: `estável`
+- Resumo: Commit + push `main` do FAB de comandos por voz (parse multi-intent + confirm); `GEMINI_*` já em prod.
+- Arquivos-chave: `api/voice/parse`, `gemini-parse-voice-command.ts`, `voice-command-fab.tsx`, `app-shell.tsx`
+- Próximo: smoke FAB nos 4 intents em prod
+
+## 2026-10-01 — voz: saldo + descrição caixinha
+
+- Status: `pronto-para-revisar`
+- Resumo: `set_pocket_balance` aceita `newDescription`; executor faz PATCH + adjustment no mesmo confirm.
+- Arquivos-chave: `gemini-parse-voice-command.ts`, `voice-command-fab.tsx`, `voice-preview.ts`
+- Próximo: smoke áudio com valor e descrição juntos
+
+## 2026-10-01 — fix voz atualizar caixinha
+
+- Status: `pronto-para-revisar`
+- Resumo: Prompt + recovery para `set_pocket_balance`; Gemini não deve mais dizer que atualizar caixinha não é suportado.
+- Arquivos-chave: `gemini-parse-voice-command.ts`
+- Próximo: smoke “atualizar caixinha X para N”
+
+## 2026-10-01 — MVP voz geral (comandos)
+
+- Status: `pronto-para-revisar`
+- Resumo: FAB mic global; `POST /api/voice/parse` multi-intent; confirm + executor (pocket, saldo, depósito, despesa).
+- Arquivos-chave: `gemini-parse-voice-command.ts`, `api/voice/parse`, `voice-command-fab.tsx`, `app-shell.tsx`
+- Próximo: smoke Falar → Confirmar nos 4 intents
+
 ## 2026-10-01 — release voz em produção
 
 - Status: `estável`

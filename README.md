@@ -39,7 +39,7 @@ Optional — Web Push (alertas de vencimento):
 - `VAPID_SUBJECT` — ex. `mailto:voce@exemplo.com`
 - `CRON_SECRET` — string longa aleatória para o job diário
 
-Optional — despesa por voz (MediaRecorder + Gemini):
+Optional — voz (MediaRecorder + Gemini): despesa no form e comandos gerais (FAB):
 
 - `GEMINI_API_KEY` — chave em [Google AI Studio](https://aistudio.google.com/apikey)
 - `GEMINI_MODEL` — default `gemini-3.5-flash-lite` (não usar `gemini-2.0-flash`, descontinuado)
@@ -108,7 +108,15 @@ PIN validation is backend-only and read from `LOGIN_PIN` env variable.
 - `/budgets`
 - `/categories`
 
-## Despesa por voz
+## Comandos por voz (geral)
+
+Botão de microfone flutuante em qualquer tela autenticada:
+
+1. **Falar** → **Enviar** → `POST /api/voice/parse`
+2. Dialog mostra o que será feito (criar caixinha, atualizar saldo, depósito ou despesa)
+3. **Confirmar** executa via APIs existentes; **Cancelar** descarta
+
+## Despesa por voz (atalho no formulário)
 
 No dialog **Nova despesa** (`PurchaseForm`):
 

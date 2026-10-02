@@ -54,7 +54,8 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 |------|-----------|
 | Auth | `login`, `logout`, `me`, `users` |
 | Dashboard / ledger | `GET /api/dashboard`, `POST /api/adjustments`, `GET /api/movements` |
-| Purchases | CRUD `/api/purchases`, `[id]`; `POST /api/purchases/parse-voice` (Gemini) |
+| Purchases | CRUD `/api/purchases`, `[id]`; `POST /api/purchases/parse-voice` (Gemini, despesa no form) |
+| Voice (geral) | `POST /api/voice/parse` (Gemini multi-intent; **não** executa) |
 | Pockets | GET/POST, `PATCH [id]`, `POST transfer` — **sem DELETE** |
 | Cards | GET/POST, `PATCH [id]`, `statement-funding` — **sem DELETE** |
 | Recurring | CRUD + `POST /api/recurring/run` |
@@ -82,7 +83,7 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 
 **Push/cron:** `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
 
-**Voz (despesa):** `GEMINI_API_KEY` (obrigatória para parse), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`)
+**Voz (despesa no form + comandos gerais):** `GEMINI_API_KEY` (obrigatória para parse), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`)
 
 **No `.env.example` mas SEM código:** `TELEGRAM_*` — backlog; **não implementar** a partir só do example.
 
@@ -100,7 +101,31 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 - Tags: sem PATCH/DELETE
 - `ideias.md` na raiz: nota solta (não é spec oficial)
 
-## Voz — despesa (implementado)
+## Voz — comandos gerais (MVP)
+
+FAB de mic no `AppShell` (telas autenticadas). Parse tipado → dialog de confirmação → execução no client.
+
+### Intents
+
+| Intent | Efeito ao confirmar |
+|--------|---------------------|
+| `create_pocket` | `POST /api/pockets` |
+| `set_pocket_balance` | `POST /api/adjustments` (delta = novo − atual), igual à edição na tela de Caixinhas |
+| `create_deposit` | `POST /api/deposits` (1 split: conta ou 1 caixinha) |
+| `create_purchase` | `POST /api/purchases` |
+| `unknown` | Só mensagem; sem Confirmar |
+
+### Backend
+
+- `POST /api/voice/parse` — sessão; body `{ audioBase64, mimeType }` (ou `transcript`); **não** muta
+- Lib: `src/shared/lib/gemini-parse-voice-command.ts`
+- UI: `src/features/voice/voice-command-fab.tsx`, `voice-preview.ts`
+
+### Fora do MVP
+
+Transferências, metas, orçamentos, faturas, delete, consultas faladas, recorrentes.
+
+## Voz — despesa no formulário (implementado)
 
 Feature estável para agentes. **Não** reintroduzir Web Speech / Groq Whisper / WhatsApp sem pedido explícito.
 

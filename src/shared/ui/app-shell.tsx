@@ -18,6 +18,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { VoiceCommandFab } from "@/features/voice/voice-command-fab";
 import { cn } from "@/shared/lib/cn";
 import { useLogout } from "@/shared/hooks/use-auth";
 import { Button } from "@/shared/ui/button";
@@ -131,6 +132,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="min-h-0 p-4 pb-8 sm:p-6 md:ml-64 md:pb-6">{children}</main>
+      <VoiceCommandFab />
     </div>
   );
 }

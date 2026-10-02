@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-10-01 — despesa por voz em produção
+> Atualizado: 2026-10-01 — release voz multi-intent em produção
 
 ## Status
 
@@ -8,33 +8,33 @@
 
 ## Objetivo recente
 
-Publicar a feature de despesa por voz (MediaRecorder + Gemini) em produção, com env `GEMINI_*` na Vercel.
+Publicar FAB de comandos por voz (multi-intent Gemini) em produção: criar caixinha, atualizar saldo/descrição, depósito, despesa.
 
 ## O que mudou
 
-- `purchase-form.tsx` — UI Falar / Parar / Enviar (gravação MediaRecorder)
-- `POST /api/purchases/parse-voice` + `gemini-parse-purchase.ts` — parse multimodal Gemini
-- `purchase-list.tsx` — removido card “Total das despesas”
-- Docs: `README.md`, `APP.md`, skill deploy reference
-- Prod: `GEMINI_API_KEY` e `GEMINI_MODEL` adicionadas na Vercel (Production/Preview/Development)
+- `POST /api/voice/parse` + `gemini-parse-voice-command.ts` — parse multi-intent (não muta)
+- `voice-command-fab.tsx` / `voice-preview.ts` — FAB no AppShell + confirm + executor
+- `set_pocket_balance` — saldo e/ou descrição (`PATCH` + adjustment)
+- Docs: `README.md`, `APP.md`, `LOG.md`
+- Env prod: `GEMINI_API_KEY` / `GEMINI_MODEL` já existiam (sem vars novas)
 
 ## Decisões
 
-- Áudio no client → Gemini no server (sem Web Speech / Groq)
-- Sem migration nova neste release
-- Lint local tem erros pré-existentes em budgets/cards/purchases (setState-in-effect); build Next ok
+- Parse no server; mutações só após Confirmar no client via APIs existentes
+- Sem migration neste release
+- Lint local ainda tem erros pré-existentes em budgets/cards/purchases; build Next ok
 
 ## Ainda aberto / próximo passo
 
-- [ ] Smoke em prod: login → Nova despesa → Falar → Enviar → form preenchido
-- [ ] Backlog: goals edit/delete; DELETE cards/pockets; tags PATCH/DELETE; Telegram
+- [ ] Smoke em prod: FAB → 4 intents (caixinha, saldo+desc, depósito, despesa)
+- [ ] Backlog: transferências, metas, orçamentos, delete, Telegram
 
 ## Como validar
 
 1. `/login` em produção
-2. `/purchases` → Nova despesa → Falar (mic) → Enviar → revisar campos → salvar
-3. Sem `GEMINI_API_KEY`: API deve responder 503
+2. Qualquer tela autenticada → mic FAB → Falar → Enviar → Confirmar
+3. Sem `GEMINI_API_KEY`: `POST /api/voice/parse` → 503
 
 ## Áreas tocadas
 
-`src/features/purchases`, `src/app/api/purchases/parse-voice`, `src/shared/lib/gemini-parse-purchase.ts`, docs agentes, Vercel env
+`src/features/voice`, `src/app/api/voice/parse`, `src/shared/lib/gemini-parse-voice-command.ts`, `app-shell.tsx`, docs agentes
