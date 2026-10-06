@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-10-01 — release voz multi-intent em produção
+> Atualizado: 2026-10-06 — fatura de cartão no mês do vencimento
 
 ## Status
 
@@ -8,33 +8,32 @@
 
 ## Objetivo recente
 
-Publicar FAB de comandos por voz (multi-intent Gemini) em produção: criar caixinha, atualizar saldo/descrição, depósito, despesa.
+Corrigir vencimento na tela de movimentos: cartão fecha dia 30 e vence dia 7; em 06/10 a fatura atual deve vencer 07/10, não 07/11.
 
 ## O que mudou
 
-- `POST /api/voice/parse` + `gemini-parse-voice-command.ts` — parse multi-intent (não muta)
-- `voice-command-fab.tsx` / `voice-preview.ts` — FAB no AppShell + confirm + executor
-- `set_pocket_balance` — saldo e/ou descrição (`PATCH` + adjustment)
-- Docs: `README.md`, `APP.md`, `LOG.md`
-- Env prod: `GEMINI_API_KEY` / `GEMINI_MODEL` já existiam (sem vars novas)
+- `src/shared/lib/card-statement.ts` — extraído `cardStatementMonth` + `cardDueDateForStatement`
+- Mês da fatura passou a ser o **mês do vencimento** (não o mês do ciclo de compras)
+- `finance-service.ts`, `due-soon-digest.ts` — filtros de movimentos/fatura/digest usam a nova regra
+- Texto do detalhe da despesa alinhado (sem “mês seguinte ao da fatura”)
+- `APP.md` — regra de fatura documentada
 
 ## Decisões
 
-- Parse no server; mutações só após Confirmar no client via APIs existentes
-- Sem migration neste release
-- Lint local ainda tem erros pré-existentes em budgets/cards/purchases; build Next ok
+- Compras no dia do fechamento (inclusive) entram na **próxima** fatura (igual à regra antiga de `day >= closingDay`)
+- Plano de pagamento (`statement_month`) passa a casar com o mês visto em Movimentos (mês em que se paga)
 
 ## Ainda aberto / próximo passo
 
-- [ ] Smoke em prod: FAB → 4 intents (caixinha, saldo+desc, depósito, despesa)
-- [ ] Backlog: transferências, metas, orçamentos, delete, Telegram
+- [ ] Smoke em prod: `/movements` outubro — compra pré-30/09 com venc. 07/10; pós-fechamento com venc. 07/11
+- [ ] Planos de fatura já salvos com o mês antigo (ciclo, não vencimento) podem ficar no mês errado — conferir se há dados
 
 ## Como validar
 
-1. `/login` em produção
-2. Qualquer tela autenticada → mic FAB → Falar → Enviar → Confirmar
-3. Sem `GEMINI_API_KEY`: `POST /api/voice/parse` → 503
+1. Cartão fecha 30, vence 7
+2. Compra com data 15/09/2026 → movimentos de **outubro** → venc. 07/10/2026
+3. Compra com data 06/10/2026 → movimentos de **novembro** → venc. 07/11/2026
 
 ## Áreas tocadas
 
-`src/features/voice`, `src/app/api/voice/parse`, `src/shared/lib/gemini-parse-voice-command.ts`, `app-shell.tsx`, docs agentes
+`src/shared/lib/card-statement.ts`, `finance-service.ts`, `due-soon-digest.ts`, `purchase-detail-dialog.tsx`, `APP.md`

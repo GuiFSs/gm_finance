@@ -16,6 +16,7 @@ App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: N
 | Zustand UI | `src/store` |
 
 - Domínio financeiro central: `src/shared/lib/finance-service.ts`, orçamentos em `budget-service.ts`
+- Fatura de cartão: `src/shared/lib/card-statement.ts` — mês da fatura = **mês do vencimento** (caixa). Compras no dia de fechamento em diante vão para a próxima fatura. Ex.: fecha 30, vence 7; compra 15/09 aparece em movimentos de outubro com venc. 07/10.
 - Auth gate (Next 16): `src/proxy.ts` (não existe `middleware.ts`)
 - UI: regra shadcn → `src/shared/ui`; skill deploy → `.cursor/skills/vercel-production-deploy`
 

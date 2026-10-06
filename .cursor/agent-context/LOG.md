@@ -2,6 +2,13 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-10-06 — fatura no mês do vencimento
+
+- Status: `estável`
+- Resumo: Movimentos/fatura/digest usam o mês do vencimento; fecha 30/vence 7 → compra 15/09 aparece em outubro com venc. 07/10, não 07/11.
+- Arquivos-chave: `src/shared/lib/card-statement.ts`, `finance-service.ts`, `due-soon-digest.ts`
+- Próximo: smoke em `/movements` (compra pré vs pós fechamento)
+
 ## 2026-10-01 — release voz multi-intent em produção
 
 - Status: `estável`

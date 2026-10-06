@@ -124,13 +124,13 @@ export async function buildDueSoonDigest(now = new Date()): Promise<DueSoonDiges
 
   for (const card of cards) {
     for (const statementMonth of statementMonthCandidates(now)) {
-      const dueDate = cardDueDateForStatement(statementMonth, card.dueDay, card.closingDay);
+      const dueDate = cardDueDateForStatement(statementMonth, card.dueDay);
       if (dueDate !== today && dueDate !== tomorrow) continue;
 
       let total = 0;
       for (const p of cardPurchases) {
         if (p.paymentSourceId !== card.id) continue;
-        if (cardStatementMonth(p.purchaseDate, card.closingDay) !== statementMonth) continue;
+        if (cardStatementMonth(p.purchaseDate, card.closingDay, card.dueDay) !== statementMonth) continue;
         total += Math.abs(Number(p.amount));
       }
 
