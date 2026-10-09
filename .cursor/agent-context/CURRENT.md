@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-10-06 — fatura de cartão no mês do vencimento
+> Atualizado: 2026-10-09 — detalhe da despesa acessível ao household inteiro
 
 ## Status
 
@@ -8,32 +8,29 @@
 
 ## Objetivo recente
 
-Corrigir vencimento na tela de movimentos: cartão fecha dia 30 e vence dia 7; em 06/10 a fatura atual deve vencer 07/10, não 07/11.
+Corrigir modal "Detalhes da despesa" que falhava ("Não foi possível carregar os detalhes") ao abrir compra de outro usuário (ex.: Maryane abrindo "Lua de mel cartao Gui" lançada por Guilherme).
 
 ## O que mudou
 
-- `src/shared/lib/card-statement.ts` — extraído `cardStatementMonth` + `cardDueDateForStatement`
-- Mês da fatura passou a ser o **mês do vencimento** (não o mês do ciclo de compras)
-- `finance-service.ts`, `due-soon-digest.ts` — filtros de movimentos/fatura/digest usam a nova regra
-- Texto do detalhe da despesa alinhado (sem “mês seguinte ao da fatura”)
-- `APP.md` — regra de fatura documentada
+- `src/shared/lib/finance-service.ts` — `getPurchaseDetailById` deixa de exigir `createdByUserId === userId` (household compartilhado)
+- `src/app/api/purchases/[id]/route.ts` — `GET` com try/catch para erro de DB não virar 500 opaco
+- `APP.md` — documenta acesso compartilhado a despesas
 
 ## Decisões
 
-- Compras no dia do fechamento (inclusive) entram na **próxima** fatura (igual à regra antiga de `day >= closingDay`)
-- Plano de pagamento (`statement_month`) passa a casar com o mês visto em Movimentos (mês em que se paga)
+- Leitura **e** mutação (PATCH/DELETE) de despesas ficam abertas a qualquer sessão autenticada, alinhado a movimentos/lista que já mostram tudo
+- `createdByUserId` permanece no schema só como auditoria de quem lançou
 
 ## Ainda aberto / próximo passo
 
-- [ ] Smoke em prod: `/movements` outubro — compra pré-30/09 com venc. 07/10; pós-fechamento com venc. 07/11
-- [ ] Planos de fatura já salvos com o mês antigo (ciclo, não vencimento) podem ficar no mês errado — conferir se há dados
+- [ ] Smoke em prod: logada como Maryane → `/movements` → abrir "Lua de mel cartao Gui" (parcela 8/8) → modal com 8 parcelas
 
 ## Como validar
 
-1. Cartão fecha 30, vence 7
-2. Compra com data 15/09/2026 → movimentos de **outubro** → venc. 07/10/2026
-3. Compra com data 06/10/2026 → movimentos de **novembro** → venc. 07/11/2026
+1. Login como Maryane
+2. Abrir movimentos de outubro → despesa "Lua de mel cartao Gui" (−R$ 147,65, parcela 8/8)
+3. Modal deve listar as 8 parcelas (mar–out/2026), sem mensagem de erro
 
 ## Áreas tocadas
 
-`src/shared/lib/card-statement.ts`, `finance-service.ts`, `due-soon-digest.ts`, `purchase-detail-dialog.tsx`, `APP.md`
+`src/shared/lib/finance-service.ts`, `src/app/api/purchases/[id]/route.ts`, `.cursor/agent-context/`

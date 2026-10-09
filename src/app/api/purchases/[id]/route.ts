@@ -14,9 +14,13 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!session) return jsonError("Unauthorized", 401);
 
   const { id } = await context.params;
-  const data = await getPurchaseDetailById(id, session.userId);
-  if (!data) return jsonError("Não encontrado", 404);
-  return Response.json({ data });
+  try {
+    const data = await getPurchaseDetailById(id, session.userId);
+    if (!data) return jsonError("Não encontrado", 404);
+    return Response.json({ data });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : "Erro inesperado");
+  }
 }
 
 export async function PATCH(request: Request, context: RouteContext) {

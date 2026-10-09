@@ -26,6 +26,7 @@ App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: N
 - Seed automático em `GET /api/auth/users`: `user_guilherme`, `user_maryane`
 - Sessão: JWT em cookie `httpOnly` `gm_finance_session`
 - No login também disparam recorrentes/depósitos vencidos (`recurring` run)
+- Household compartilhado: despesas (`GET/PATCH/DELETE /api/purchases/[id]`) são acessíveis por **qualquer** sessão autenticada; `createdByUserId` só identifica quem lançou
 
 ### Rotas públicas (`src/proxy.ts`)
 

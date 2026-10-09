@@ -2,6 +2,13 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-10-09 — detalhe da despesa no household
+
+- Status: `estável`
+- Resumo: Modal falhava para Maryane em compras do Gui (404 por `createdByUserId`); `getPurchaseDetailById` agora compartilha o household.
+- Arquivos-chave: `finance-service.ts`, `api/purchases/[id]/route.ts`
+- Próximo: smoke em prod como Maryane na parcela 8/8
+
 ## 2026-10-06 — fatura no mês do vencimento
 
 - Status: `estável`

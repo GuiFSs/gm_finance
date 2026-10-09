@@ -1579,7 +1579,10 @@ export type PurchaseDetailInstallment = {
   dueDate: string | null;
 };
 
+/** Detalhe da despesa. Household compartilhado: qualquer sessão autenticada (userId) pode acessar. */
 export async function getPurchaseDetailById(purchaseId: string, userId: string) {
+  if (!userId) return null;
+
   const row = await db
     .select({
       id: schema.purchases.id,
@@ -1594,7 +1597,6 @@ export async function getPurchaseDetailById(purchaseId: string, userId: string) 
       paymentSourceId: schema.purchases.paymentSourceId,
       installmentNumber: schema.purchases.installmentNumber,
       installmentCount: schema.purchases.installmentCount,
-      createdByUserId: schema.purchases.createdByUserId,
       cardName: schema.cards.name,
       pocketName: schema.pockets.name,
       closingDay: schema.cards.closingDay,
@@ -1608,7 +1610,7 @@ export async function getPurchaseDetailById(purchaseId: string, userId: string) 
     .limit(1);
 
   const main = row[0];
-  if (!main || main.createdByUserId !== userId) return null;
+  if (!main) return null;
 
   const siblingsRaw = main.seriesId
     ? await db
