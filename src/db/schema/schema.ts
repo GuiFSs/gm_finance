@@ -163,10 +163,32 @@ export const purchases = sqliteTable("purchases", {
   installmentCount: integer("installment_count").notNull().default(1),
   installmentNumber: integer("installment_number").notNull().default(1),
   recurringOriginId: text("recurring_origin_id").references(() => recurringExpenses.id),
+  /** yyyy-MM-dd — quitação manual (conta/caixinha). Cartão usa card_statement_payments. */
+  paidAt: text("paid_at"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch() * 1000)`),
 });
+
+/** Fatura de cartão marcada como paga (uma linha quita todas as compras daquele mês). */
+export const cardStatementPayments = sqliteTable(
+  "card_statement_payments",
+  {
+    id: text("id").primaryKey(),
+    cardId: text("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    statementMonth: text("statement_month").notNull(),
+    paidAt: text("paid_at").notNull(),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => [uniqueIndex("card_statement_payments_card_month_uq").on(t.cardId, t.statementMonth)],
+);
 
 export const purchaseTags = sqliteTable("purchase_tags", {
   purchaseId: text("purchase_id")

@@ -30,6 +30,8 @@ export type MonthMovementRow = {
   dueDate?: string | null;
   /** Plano de pagamento da fatura (conta + caixinhas), quando cadastrado para aquele mês de fatura. */
   cardFundingPlan?: string | null;
+  /** Quitação manual. Conta/caixinha: a compra. Cartão: a fatura do mês. */
+  paid?: boolean;
 };
 
 type SourcesSummaryRow = {
@@ -302,6 +304,80 @@ export function useCardStatementFunding(cardId: string | null, statementMonth?: 
       };
     },
     enabled: Boolean(cardId),
+  });
+}
+
+function mapMovementCache(
+  old: unknown,
+  mapRow: (row: MonthMovementRow) => MonthMovementRow,
+): unknown {
+  if (!old || typeof old !== "object" || !("data" in old)) return old;
+  const data = (old as { data?: unknown }).data;
+  if (!Array.isArray(data)) return old;
+  return { ...old, data: data.map((row) => mapRow(row as MonthMovementRow)) };
+}
+
+export function useSetPurchasePaid() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { purchaseId: string; paid: boolean }) =>
+      fetcher(`/api/purchases/${payload.purchaseId}/paid`, {
+        method: "PATCH",
+        body: JSON.stringify({ paid: payload.paid }),
+      }),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["movements"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["movements"] });
+      queryClient.setQueriesData({ queryKey: ["movements"] }, (old) =>
+        mapMovementCache(old, (row) =>
+          row.purchaseId === variables.purchaseId && row.sourceType !== "card"
+            ? { ...row, paid: variables.paid }
+            : row,
+        ),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    },
+  });
+}
+
+export function useSetCardStatementPaid() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { cardId: string; statementMonth: string; paid: boolean }) =>
+      fetcher(`/api/cards/${payload.cardId}/statement-payment`, {
+        method: "PUT",
+        body: JSON.stringify({ statementMonth: payload.statementMonth, paid: payload.paid }),
+      }),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["movements"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["movements"] });
+      queryClient.setQueriesData({ queryKey: ["movements"] }, (old) =>
+        mapMovementCache(old, (row) =>
+          row.sourceType === "card" &&
+          row.sourceId === variables.cardId &&
+          row.statementMonth === variables.statementMonth
+            ? { ...row, paid: variables.paid }
+            : row,
+        ),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    },
   });
 }
 

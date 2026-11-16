@@ -19,15 +19,22 @@ import {
 import { differenceInCalendarDays, format } from "date-fns";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { CardStatementFundingModal } from "@/features/cards/card-statement-funding-modal";
 import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
-import { useMonthMovements, type MonthMovementRow } from "@/shared/hooks/use-app-data";
+import {
+  useMonthMovements,
+  useSetCardStatementPaid,
+  useSetPurchasePaid,
+  type MonthMovementRow,
+} from "@/shared/hooks/use-app-data";
 import { cn } from "@/shared/lib/cn";
 import { formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/shared/ui/accordion";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Label } from "@/shared/ui/label";
 import { SelectOptions } from "@/shared/ui/select-options";
@@ -453,17 +460,157 @@ function SourceMetric({
   );
 }
 
+function calendarMeansAlreadyPaid(status: CalendarRelativeStatus | null): boolean {
+  return status?.kind === "yesterday" || status?.kind === "earlier";
+}
+
+function PagoBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="gap-1 border-emerald-600/50 bg-emerald-50 font-normal text-emerald-950 dark:border-emerald-600/45 dark:bg-emerald-950/35 dark:text-emerald-100"
+    >
+      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+      Pago
+    </Badge>
+  );
+}
+
+function EmAbertoBadge() {
+  return (
+    <Badge variant="outline" className="font-normal text-muted-foreground">
+      Em aberto
+    </Badge>
+  );
+}
+
+/** Despesa quitável: “Pago” só entra na mão. Transferência/ajuste segue o calendário. */
+function ExpenseStatusBadges({
+  calendar,
+  paid,
+  hideSettledBadge,
+}: {
+  calendar: CalendarRelativeStatus | null;
+  paid?: boolean;
+  hideSettledBadge?: boolean;
+}) {
+  if (paid === true) {
+    if (hideSettledBadge) return null;
+    return <PagoBadge />;
+  }
+  if (paid === false) {
+    if (calendar && !calendarMeansAlreadyPaid(calendar)) {
+      return <ExpenseDateBadges status={calendar} />;
+    }
+    return <EmAbertoBadge />;
+  }
+  return <ExpenseDateBadges status={calendar} />;
+}
+
+function FutureExpenseStatus({
+  item,
+  calendar,
+}: {
+  item: MonthMovementRow;
+  calendar: CalendarRelativeStatus | null;
+}) {
+  if (item.sourceType === "card" && typeof item.paid === "boolean") {
+    return <ExpenseStatusBadges calendar={calendar} paid={item.paid} />;
+  }
+  if (calendar && !calendarMeansAlreadyPaid(calendar)) {
+    return <ExpenseDateBadges status={calendar} />;
+  }
+  return (
+    <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/50 dark:text-amber-100">
+      Previsto
+    </Badge>
+  );
+}
+
+function PurchasePaidCheckbox({
+  paid,
+  pending,
+  onToggle,
+}: {
+  paid: boolean;
+  pending: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <label
+      className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-foreground"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Checkbox
+        checked={paid}
+        disabled={pending}
+        onCheckedChange={(checked) => {
+          if (checked === "indeterminate") return;
+          onToggle(checked === true);
+        }}
+        aria-label={paid ? "Desmarcar como pago" : "Marcar como pago"}
+      />
+      Pago
+    </label>
+  );
+}
+
+function CardStatementPaidButton({
+  paid,
+  pending,
+  onToggle,
+}: {
+  paid: boolean;
+  pending: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={paid ? "secondary" : "outline"}
+      size="sm"
+      className="h-7 gap-1 px-2 text-xs"
+      disabled={pending}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggle(!paid);
+      }}
+    >
+      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {paid ? "Fatura paga" : "Marcar fatura paga"}
+    </Button>
+  );
+}
+
+function cardGroupIsPaid(group: PaymentSourceGroup): boolean {
+  return group.items.length > 0 && group.items.every((item) => item.paid === true);
+}
+
 function OutMovementRow({
   item,
   onSelectPurchase,
   dateBadge,
+  showPurchasePaidToggle,
+  showCardStatementToggle,
+  purchasePending,
+  cardPending,
+  onTogglePurchasePaid,
+  onToggleCardStatement,
 }: {
   item: MonthMovementRow;
   onSelectPurchase: (id: string) => void;
   dateBadge?: CalendarRelativeStatus | null;
+  showPurchasePaidToggle?: boolean;
+  showCardStatementToggle?: boolean;
+  purchasePending?: boolean;
+  cardPending?: boolean;
+  onTogglePurchasePaid?: (purchaseId: string, paid: boolean) => void;
+  onToggleCardStatement?: (cardId: string, paid: boolean) => void;
 }) {
   const isCard = item.sourceType === "card";
   const isClickable = Boolean(item.purchaseId);
+  const paid = item.paid;
 
   const inner = (
     <>
@@ -476,7 +623,11 @@ function OutMovementRow({
               Cartão
             </Badge>
           ) : null}
-          <ExpenseDateBadges status={dateBadge ?? null} />
+          <ExpenseStatusBadges
+            calendar={dateBadge ?? null}
+            paid={paid}
+            hideSettledBadge={Boolean(showPurchasePaidToggle || showCardStatementToggle)}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
@@ -513,33 +664,68 @@ function OutMovementRow({
         <span className="text-right font-semibold tabular-nums text-red-700 dark:text-red-400">
           {formatCurrency(item.amount)}
         </span>
-        {isClickable ? (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
-        ) : null}
+        {isClickable ? <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden /> : null}
       </div>
     </>
   );
+
+  const purchaseToggle =
+    showPurchasePaidToggle && item.purchaseId && typeof paid === "boolean" && onTogglePurchasePaid ? (
+      <PurchasePaidCheckbox
+        paid={paid}
+        pending={Boolean(purchasePending)}
+        onToggle={(next) => onTogglePurchasePaid(item.purchaseId!, next)}
+      />
+    ) : null;
+  const cardToggle =
+    showCardStatementToggle && isCard && item.sourceId && typeof paid === "boolean" && onToggleCardStatement ? (
+      <CardStatementPaidButton
+        paid={paid}
+        pending={Boolean(cardPending)}
+        onToggle={(next) => onToggleCardStatement(item.sourceId!, next)}
+      />
+    ) : null;
 
   const baseClass =
     "flex w-full items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/80 px-3 py-3 text-left transition dark:border-red-900/50 dark:bg-red-950/30";
 
   if (isClickable) {
     return (
-      <button type="button" className={`${baseClass} hover:bg-red-100/90 dark:hover:bg-red-950/50`} onClick={() => onSelectPurchase(item.purchaseId!)}>
-        {inner}
-      </button>
+      <div className={`${baseClass} hover:bg-red-100/90 dark:hover:bg-red-950/50`}>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start justify-between gap-3 text-left"
+          onClick={() => onSelectPurchase(item.purchaseId!)}
+        >
+          {inner}
+        </button>
+        {purchaseToggle}
+        {cardToggle}
+      </div>
     );
   }
 
-  return <div className={baseClass}>{inner}</div>;
+  return (
+    <div className={baseClass}>
+      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">{inner}</div>
+      {purchaseToggle}
+      {cardToggle}
+    </div>
+  );
 }
 
 function FutureMovementRow({
   item,
   dateBadge,
+  showCardStatementToggle,
+  cardPending,
+  onToggleCardStatement,
 }: {
   item: MonthMovementRow;
   dateBadge?: CalendarRelativeStatus | null;
+  showCardStatementToggle?: boolean;
+  cardPending?: boolean;
+  onToggleCardStatement?: (cardId: string, paid: boolean) => void;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/25">
@@ -547,13 +733,7 @@ function FutureMovementRow({
         <div className="flex flex-wrap items-center gap-2">
           <ArrowUpCircle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
           <span className="font-medium text-amber-950 dark:text-amber-100">{item.title}</span>
-          {dateBadge ? (
-            <ExpenseDateBadges status={dateBadge} />
-          ) : (
-            <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/50 dark:text-amber-100">
-              Previsto
-            </Badge>
-          )}
+          <FutureExpenseStatus item={item} calendar={dateBadge ?? null} />
           {item.sourceType === "card" ? (
             <Badge variant="outline" className="font-normal">
               Cartão
@@ -585,9 +765,22 @@ function FutureMovementRow({
           </div>
         ) : null}
       </div>
-      <span className="shrink-0 font-semibold tabular-nums text-amber-900 dark:text-amber-200/90">
-        {formatCurrency(item.amount)}
-      </span>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <span className="font-semibold tabular-nums text-amber-900 dark:text-amber-200/90">
+          {formatCurrency(item.amount)}
+        </span>
+        {showCardStatementToggle &&
+        item.sourceType === "card" &&
+        item.sourceId &&
+        typeof item.paid === "boolean" &&
+        onToggleCardStatement ? (
+          <CardStatementPaidButton
+            paid={item.paid}
+            pending={Boolean(cardPending)}
+            onToggle={(next) => onToggleCardStatement(item.sourceId!, next)}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -683,7 +876,31 @@ export function MovementsList() {
   } | null>(null);
   const [fundingModalEpoch, setFundingModalEpoch] = useState(0);
   const { data: movementsResponse, isLoading, isError, error } = useMonthMovements(month);
+  const setPurchasePaid = useSetPurchasePaid();
+  const setCardStatementPaid = useSetCardStatementPaid();
+  const purchasePendingId = setPurchasePaid.isPending ? setPurchasePaid.variables?.purchaseId : undefined;
+  const cardPendingId = setCardStatementPaid.isPending ? setCardStatementPaid.variables?.cardId : undefined;
   const list = movementsResponse?.data;
+
+  function togglePurchase(purchaseId: string, paid: boolean) {
+    setPurchasePaid.mutate(
+      { purchaseId, paid },
+      {
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o pagamento"),
+      },
+    );
+  }
+
+  function toggleCardStatement(cardId: string, paid: boolean) {
+    setCardStatementPaid.mutate(
+      { cardId, statementMonth: month, paid },
+      {
+        onError: (error) =>
+          toast.error(error instanceof Error ? error.message : "Não foi possível atualizar a fatura"),
+      },
+    );
+  }
   const sourcesSummary = movementsResponse?.sourcesSummary;
   const isCurrentMonth = month === currentMonthParam();
   const current = currentMonthParam();
@@ -1155,7 +1372,8 @@ export function MovementsList() {
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Despesas</h2>
                     <p className="text-xs text-muted-foreground">
-                      Toque em uma despesa cadastrada para ver parcelas, fatura do cartão e vencimento.
+                      Toque em uma despesa para ver parcelas e vencimento. Em conta ou caixinha, marque Pago em cada
+                      lançamento. No cartão, marque a fatura do mês: todas as compras daquele mês ficam pagas.
                     </p>
                     {expenseViewMode === "chronological" ? (
                       <ul className="space-y-2">
@@ -1165,6 +1383,12 @@ export function MovementsList() {
                               item={item}
                               onSelectPurchase={setDetailPurchaseId}
                               dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                              showPurchasePaidToggle={Boolean(item.purchaseId) && item.sourceType !== "card"}
+                              showCardStatementToggle={item.sourceType === "card" && Boolean(item.sourceId)}
+                              purchasePending={purchasePendingId === item.purchaseId}
+                              cardPending={cardPendingId === item.sourceId}
+                              onTogglePurchasePaid={togglePurchase}
+                              onToggleCardStatement={toggleCardStatement}
                             />
                           </li>
                         ))}
@@ -1189,25 +1413,32 @@ export function MovementsList() {
                                 variant="plain"
                                 trailingAction={
                                   g.sourceType === "card" && g.sourceId ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 gap-1 px-2 text-xs"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setFundingModalCard({
-                                          id: g.sourceId!,
-                                          name: cardDisplayNameForExpenseGroup(g),
-                                          invoiceTotalFromList: Math.abs(g.subtotal),
-                                        });
-                                        setFundingModalEpoch((x) => x + 1);
-                                      }}
-                                    >
-                                      <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                      Pagamento da fatura
-                                    </Button>
+                                    <>
+                                      <CardStatementPaidButton
+                                        paid={cardGroupIsPaid(g)}
+                                        pending={cardPendingId === g.sourceId}
+                                        onToggle={(next) => toggleCardStatement(g.sourceId!, next)}
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 gap-1 px-2 text-xs"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setFundingModalCard({
+                                            id: g.sourceId!,
+                                            name: cardDisplayNameForExpenseGroup(g),
+                                            invoiceTotalFromList: Math.abs(g.subtotal),
+                                          });
+                                          setFundingModalEpoch((x) => x + 1);
+                                        }}
+                                      >
+                                        <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                        Pagamento da fatura
+                                      </Button>
+                                    </>
                                   ) : null
                                 }
                               />
@@ -1220,6 +1451,9 @@ export function MovementsList() {
                                       item={item}
                                       onSelectPurchase={setDetailPurchaseId}
                                       dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                                      showPurchasePaidToggle={Boolean(item.purchaseId) && item.sourceType !== "card"}
+                                      purchasePending={purchasePendingId === item.purchaseId}
+                                      onTogglePurchasePaid={togglePurchase}
                                     />
                                   </li>
                                 ))}
@@ -1242,6 +1476,9 @@ export function MovementsList() {
                             <FutureMovementRow
                               item={item}
                               dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
+                              showCardStatementToggle={item.sourceType === "card" && Boolean(item.sourceId)}
+                              cardPending={cardPendingId === item.sourceId}
+                              onToggleCardStatement={toggleCardStatement}
                             />
                           </li>
                         ))}
@@ -1266,24 +1503,31 @@ export function MovementsList() {
                                 variant="plain"
                                 trailingAction={
                                   g.sourceType === "card" && g.sourceId ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 gap-1 px-2 text-xs"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setFundingModalCard({
-                                          id: g.sourceId!,
-                                          name: cardDisplayNameForExpenseGroup(g),
-                                        });
-                                        setFundingModalEpoch((x) => x + 1);
-                                      }}
-                                    >
-                                      <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                      Pagamento da fatura
-                                    </Button>
+                                    <>
+                                      <CardStatementPaidButton
+                                        paid={cardGroupIsPaid(g)}
+                                        pending={cardPendingId === g.sourceId}
+                                        onToggle={(next) => toggleCardStatement(g.sourceId!, next)}
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 gap-1 px-2 text-xs"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setFundingModalCard({
+                                            id: g.sourceId!,
+                                            name: cardDisplayNameForExpenseGroup(g),
+                                          });
+                                          setFundingModalEpoch((x) => x + 1);
+                                        }}
+                                      >
+                                        <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                        Pagamento da fatura
+                                      </Button>
+                                    </>
                                   ) : null
                                 }
                               />

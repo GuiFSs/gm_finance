@@ -89,6 +89,15 @@ export const replaceCardStatementFundingSchema = z.object({
   splits: z.array(cardStatementFundingSplitInputSchema),
 });
 
+export const setPurchasePaidSchema = z.object({
+  paid: z.boolean(),
+});
+
+export const setCardStatementPaidSchema = z.object({
+  statementMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  paid: z.boolean(),
+});
+
 export const createCategorySchema = z.object({
   name: z.string().min(1),
   createdByUserId: z.string().min(1),

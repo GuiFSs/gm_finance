@@ -17,6 +17,7 @@ App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: N
 
 - Domínio financeiro central: `src/shared/lib/finance-service.ts`, orçamentos em `budget-service.ts`
 - Fatura de cartão: `src/shared/lib/card-statement.ts` — mês da fatura = **mês do vencimento** (caixa). Compras no dia de fechamento em diante vão para a próxima fatura. Ex.: fecha 30, vence 7; compra 15/09 aparece em movimentos de outubro com venc. 07/10.
+- Quitação manual em `/movements`: despesa de conta/caixinha tem `purchases.paid_at` (cada parcela é uma linha). Cartão usa `card_statement_payments` (`card_id` + `statement_month`); marcar a fatura quita todas as compras daquele mês. A data não marca mais “já pago”. Entradas, transferências e ajustes ficam de fora.
 - Auth gate (Next 16): `src/proxy.ts` (não existe `middleware.ts`)
 - UI: regra shadcn → `src/shared/ui`; skill deploy → `.cursor/skills/vercel-production-deploy`
 
@@ -56,10 +57,10 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 |------|-----------|
 | Auth | `login`, `logout`, `me`, `users` |
 | Dashboard / ledger | `GET /api/dashboard`, `POST /api/adjustments`, `GET /api/movements` |
-| Purchases | CRUD `/api/purchases`, `[id]`; `POST /api/purchases/parse-voice` (Gemini, despesa no form) |
+| Purchases | CRUD `/api/purchases`, `[id]`; `PATCH /api/purchases/[id]/paid` (conta/caixinha); `POST /api/purchases/parse-voice` (Gemini, despesa no form) |
 | Voice (geral) | `POST /api/voice/parse` (Gemini multi-intent; **não** executa) |
 | Pockets | GET/POST, `PATCH [id]`, `POST transfer` — **sem DELETE** |
-| Cards | GET/POST, `PATCH [id]`, `statement-funding` — **sem DELETE** |
+| Cards | GET/POST, `PATCH [id]`, `statement-funding`, `PUT [id]/statement-payment` — **sem DELETE** |
 | Recurring | CRUD + `POST /api/recurring/run` |
 | Deposits | CRUD deposits + CRUD `recurring-deposits` |
 | Goals | **só** GET/POST |

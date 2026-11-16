@@ -2,6 +2,13 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-16 — pagamento manual das despesas
+
+- Status: `pronto-para-revisar`
+- Resumo: Movimentos não marcam “já pago” pela data. Conta/caixinha: checkbox por despesa. Cartão: uma fatura paga quita o mês. Migração 0014 aplicada no Turso do `.env.local`. Push em `main` feito (deploy Vercel automático).
+- Arquivos-chave: `finance-service.ts`, `movements-list.tsx`, `0014_expense_payments.sql`
+- Próximo: confirmar que `0014` está aplicada no Turso de produção; smoke em `/movements` (conta + fatura)
+
 ## 2026-10-09 — detalhe da despesa no household
 
 - Status: `estável`

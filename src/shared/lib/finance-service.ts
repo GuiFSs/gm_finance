@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { addMonths, endOfMonth, format, startOfMonth } from "date-fns";
 
 import { db, schema } from "@/db";
@@ -798,6 +798,11 @@ export type MonthMovement = {
   dueDate?: string | null;
   /** Texto do plano (conta/caixinhas) para pagar a fatura do cartão naquele mês, se cadastrado. */
   cardFundingPlan?: string | null;
+  /**
+   * Quitação manual. Conta/caixinha: a própria compra. Cartão: a fatura do mês.
+   * Ausente em entradas, transferências e ajustes.
+   */
+  paid?: boolean;
 };
 
 
@@ -1108,6 +1113,34 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
     // Não bloquear movimentos se o plano de fatura falhar (ex.: migração pendente no banco).
   }
 
+  let paidPurchaseIds = new Set<string>();
+  let paidCardIds = new Set<string>();
+  try {
+    const paidRows = await db
+      .select({ id: schema.purchases.id })
+      .from(schema.purchases)
+      .where(
+        and(
+          ne(schema.purchases.paymentSourceType, "card"),
+          gte(schema.purchases.purchaseDate, start),
+          lte(schema.purchases.purchaseDate, end),
+          isNotNull(schema.purchases.paidAt),
+        ),
+      );
+    paidPurchaseIds = new Set(paidRows.map((r) => r.id));
+  } catch {
+    // Coluna purchases.paid_at ausente até a migração 0014.
+  }
+  try {
+    const paidCards = await db
+      .select({ cardId: schema.cardStatementPayments.cardId })
+      .from(schema.cardStatementPayments)
+      .where(eq(schema.cardStatementPayments.statementMonth, targetYm));
+    paidCardIds = new Set(paidCards.map((r) => r.cardId));
+  } catch {
+    // Tabela card_statement_payments ausente até a migração 0014.
+  }
+
   const depositsInMonth = await db
     .select({
       id: schema.deposits.id,
@@ -1371,6 +1404,10 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
         p.paymentSourceType === "card" && p.paymentSourceId
           ? cardFundingLabels.get(p.paymentSourceId) ?? null
           : null,
+      paid:
+        p.paymentSourceType === "card"
+          ? Boolean(p.paymentSourceId && paidCardIds.has(p.paymentSourceId))
+          : paidPurchaseIds.has(p.id),
     });
   }
 
@@ -1474,6 +1511,10 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
         r.paymentSourceType === "card" && r.paymentSourceId
           ? cardFundingLabels.get(r.paymentSourceId) ?? null
           : null,
+      paid:
+        r.paymentSourceType === "card" && r.paymentSourceId
+          ? paidCardIds.has(r.paymentSourceId)
+          : undefined,
     });
   }
 
@@ -1686,4 +1727,83 @@ export async function getPurchaseDetailById(purchaseId: string, userId: string) 
     tagIds,
     installments,
   };
+}
+
+/** Marca ou desmarca uma despesa de conta/caixinha. Compras no cartão quitam pela fatura do mês. */
+export async function setPurchasePaid(purchaseId: string, userId: string, paid: boolean) {
+  if (!userId) throw new Error("Unauthorized");
+
+  const row = await db
+    .select({
+      id: schema.purchases.id,
+      paymentSourceType: schema.purchases.paymentSourceType,
+    })
+    .from(schema.purchases)
+    .where(eq(schema.purchases.id, purchaseId))
+    .limit(1);
+  const purchase = row[0];
+  if (!purchase) return false;
+  if (purchase.paymentSourceType === "card") {
+    throw new Error("Compras no cartão são quitadas ao marcar a fatura do mês como paga.");
+  }
+
+  await db
+    .update(schema.purchases)
+    .set({ paidAt: paid ? format(new Date(), "yyyy-MM-dd") : null })
+    .where(eq(schema.purchases.id, purchaseId));
+  return true;
+}
+
+/** Marca ou desmarca a fatura do cartão naquele mês. Vale para todas as compras da fatura. */
+export async function setCardStatementPaid(
+  cardId: string,
+  userId: string,
+  statementMonth: string,
+  paid: boolean,
+) {
+  if (!userId) throw new Error("Unauthorized");
+  if (!/^\d{4}-\d{2}$/.test(statementMonth)) throw new Error("Mês da fatura inválido.");
+
+  const card = await db
+    .select({ id: schema.cards.id })
+    .from(schema.cards)
+    .where(eq(schema.cards.id, cardId))
+    .limit(1);
+  if (!card[0]) return false;
+
+  const existing = await db
+    .select({ id: schema.cardStatementPayments.id })
+    .from(schema.cardStatementPayments)
+    .where(
+      and(
+        eq(schema.cardStatementPayments.cardId, cardId),
+        eq(schema.cardStatementPayments.statementMonth, statementMonth),
+      ),
+    )
+    .limit(1);
+
+  if (!paid) {
+    if (existing[0]) {
+      await db.delete(schema.cardStatementPayments).where(eq(schema.cardStatementPayments.id, existing[0].id));
+    }
+    return true;
+  }
+
+  const paidAt = format(new Date(), "yyyy-MM-dd");
+  if (existing[0]) {
+    await db
+      .update(schema.cardStatementPayments)
+      .set({ paidAt })
+      .where(eq(schema.cardStatementPayments.id, existing[0].id));
+    return true;
+  }
+
+  await db.insert(schema.cardStatementPayments).values({
+    id: crypto.randomUUID(),
+    cardId,
+    statementMonth,
+    paidAt,
+    createdByUserId: userId,
+  });
+  return true;
 }
