@@ -803,6 +803,8 @@ export type MonthMovement = {
    * Ausente em entradas, transferências e ajustes.
    */
   paid?: boolean;
+  /** Nomes das tags da compra. Parcelas herdam as tags da série. */
+  tags?: string[];
 };
 
 
@@ -1518,6 +1520,8 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
     });
   }
 
+  await attachPurchaseTags(movements);
+
   movements.sort((a, b) => {
     const dateCmp = a.date.localeCompare(b.date);
     if (dateCmp !== 0) return dateCmp;
@@ -1525,6 +1529,45 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
     return order[a.type] - order[b.type];
   });
   return movements;
+}
+
+/** Tags da compra. Se a parcela não tem tag própria, usa as tags de outra parcela da mesma série. */
+async function attachPurchaseTags(movements: MonthMovement[]) {
+  const purchaseIds = [...new Set(movements.map((row) => row.purchaseId).filter((id): id is string => Boolean(id)))];
+  if (purchaseIds.length === 0) return;
+
+  const rows = await db
+    .select({
+      id: schema.purchases.id,
+      seriesId: schema.purchases.seriesId,
+      tagName: schema.tags.name,
+    })
+    .from(schema.purchases)
+    .leftJoin(schema.purchaseTags, eq(schema.purchaseTags.purchaseId, schema.purchases.id))
+    .leftJoin(schema.tags, eq(schema.tags.id, schema.purchaseTags.tagId))
+    .where(inArray(schema.purchases.id, purchaseIds));
+
+  const seriesOf = new Map<string, string>();
+  const tagsByPurchase = new Map<string, string[]>();
+  const tagsBySeries = new Map<string, string[]>();
+  for (const row of rows) {
+    seriesOf.set(row.id, row.seriesId);
+    if (!row.tagName) continue;
+    const own = tagsByPurchase.get(row.id) ?? [];
+    if (!own.includes(row.tagName)) own.push(row.tagName);
+    tagsByPurchase.set(row.id, own);
+    const seriesTags = tagsBySeries.get(row.seriesId) ?? [];
+    if (!seriesTags.includes(row.tagName)) seriesTags.push(row.tagName);
+    tagsBySeries.set(row.seriesId, seriesTags);
+  }
+
+  for (const movement of movements) {
+    if (!movement.purchaseId) continue;
+    const own = tagsByPurchase.get(movement.purchaseId);
+    const seriesId = seriesOf.get(movement.purchaseId);
+    const seriesTags = seriesId ? tagsBySeries.get(seriesId) : undefined;
+    movement.tags = own && own.length > 0 ? own : (seriesTags ?? []);
+  }
 }
 
 /**

@@ -3,30 +3,38 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
-import { buildCategorySpendRows } from "@/features/dashboard/category-spend";
-import { DayTile, LedgerRow, MonthSwitcher, SectionHeading } from "@/features/month/ledger";
+import {
+  categorySlicesFromMovements,
+  monthlyGroups,
+  sharePercents,
+  tagSlicesForCategory,
+  type CategorySlice,
+  type MonthGroup,
+} from "@/features/dashboard/category-spend";
+import { FlatPie } from "@/features/dashboard/flat-pie";
+import { monthAbbrev, sumMonthTotals, yearColumns, yearMonthParams } from "@/features/dashboard/period-model";
+import { PeriodColumns } from "@/features/dashboard/period-chart";
+import { useYearMovements } from "@/features/dashboard/use-period-data";
+import { MonthSwitcher, SectionHeading } from "@/features/month/ledger";
 import {
   computeMonthTotals,
   currentMonthParam,
-  dayOfMonth,
   formatAmount,
   monthName,
-  todayYmd,
+  type MonthTotals,
 } from "@/features/month/month-model";
 import { MonthPlane } from "@/features/month/month-plane";
-import { OpenItemsList, openItemsCount } from "@/features/month/open-items-list";
 import { EnablePushCard } from "@/features/notifications/enable-push";
-import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
 import {
-  useCategories,
   useCreateAdjustment,
   useCurrentUser,
   useDashboard,
   useMonthlyBudget,
   useMonthMovements,
+  type MonthMovementRow,
 } from "@/shared/hooks/use-app-data";
 import { cn } from "@/shared/lib/cn";
 import { formatCurrency, toInputDate } from "@/shared/utils/formatters";
@@ -34,113 +42,177 @@ import { Button } from "@/shared/ui/button";
 import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
 
-const OPEN_LIMIT = 6;
+const THIS_YEAR = new Date().getFullYear();
 
 export function DashboardOverview() {
   const router = useRouter();
   const [month, setMonth] = useState(currentMonthParam);
-  const todayStr = todayYmd();
-  const isCurrentMonth = month === currentMonthParam();
-  const movements = useMonthMovements(month);
-  const dashboard = useDashboard();
-  const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
+  const [period, setPeriod] = useState<"month" | "year">("month");
+  const year = Number(month.slice(0, 4));
+  const yearMode = period === "year";
 
-  const list = movements.data?.data;
-  const totals = useMemo(() => computeMonthTotals(list), [list]);
-  const open = useMemo(() => openItemsCount(list, month), [list, month]);
+  const movements = useMonthMovements(month);
+  const yearMovements = useYearMovements(year, yearMode);
+  const dashboard = useDashboard();
+
+  const monthTotals = useMemo(() => computeMonthTotals(movements.data?.data), [movements.data]);
+  const columns = useMemo(
+    () => (yearMode ? yearColumns(year, yearMovements.map((query) => query.data?.data)) : []),
+    [yearMode, year, yearMovements],
+  );
+
+  const yearLoading = yearMode && yearMovements.some((query) => !query.data && !query.isError);
+  const yearError = yearMode && yearMovements.some((query) => query.isError);
+  const pictureLoading = yearMode ? yearLoading : movements.isLoading;
+  const pictureError = yearMode ? yearError : movements.isError;
+
+  const totals = yearMode
+    ? sumMonthTotals(yearMovements.map((query) => computeMonthTotals(query.data?.data)))
+    : monthTotals;
   const deficit = totals.sobra < 0;
-  const name = monthName(month);
+  const periodName = yearMode ? String(year) : monthName(month);
 
   return (
     <div className="pb-4">
-      <PurchaseDetailDialog
-        purchaseId={detailPurchaseId}
-        open={detailPurchaseId !== null}
-        onOpenChange={(o) => !o && setDetailPurchaseId(null)}
-      />
-
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-2xl font-bold lowercase leading-none tracking-tight text-foreground md:invisible">g&amp;m</p>
-        <MonthSwitcher month={month} onChange={setMonth} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3 sm:justify-start">
+          <p className="text-2xl font-bold lowercase leading-none tracking-tight text-foreground md:hidden">g&amp;m</p>
+          <ToggleGroup
+            type="single"
+            value={period}
+            onValueChange={(value) => {
+              if (value === "month" || value === "year") setPeriod(value);
+            }}
+            aria-label="Período"
+            className="gap-0 border border-input"
+          >
+            <ToggleGroupItem
+              value="month"
+              className="h-8 px-3 text-[15px] data-[state=on]:bg-foreground data-[state=on]:text-background"
+            >
+              mês
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="year"
+              className="h-8 px-3 text-[15px] data-[state=on]:bg-foreground data-[state=on]:text-background"
+            >
+              ano
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        {yearMode ? (
+          <YearSwitcher
+            year={year}
+            onChange={(next) => setMonth(`${next}-${month.slice(5, 7)}`)}
+          />
+        ) : (
+          <MonthSwitcher month={month} onChange={setMonth} />
+        )}
       </div>
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-14">
-        <div>
-          <section aria-labelledby="sobra-heading" className="pt-6">
-            <h1 id="sobra-heading" className="text-[15px] font-medium lowercase text-muted-foreground">
-              {deficit ? "falta" : "sobra"} em {name}
-            </h1>
-            {movements.isLoading ? (
-              <p className="mt-2 h-12 w-48 animate-pulse bg-muted" aria-label="Carregando" />
-            ) : movements.isError ? (
-              <p className="mt-2 text-[15px] text-ink-out">Não foi possível carregar o mês. Recarregue a página.</p>
-            ) : (
-              <p
-                className={cn(
-                  "mt-1 text-[48px] font-bold leading-none tracking-[-0.03em] tabular-nums",
-                  deficit ? "text-ink-out" : "text-foreground",
-                )}
-              >
-                <span className="mr-1.5 text-2xl font-medium tracking-normal">{deficit ? "−R$" : "R$"}</span>
-                {formatAmount(totals.sobra)}
-              </p>
+      <section aria-labelledby="sobra-heading" className="pt-6">
+        <h1 id="sobra-heading" className="text-[15px] font-medium lowercase text-muted-foreground">
+          {deficit && !pictureLoading ? "falta" : "sobra"} em {periodName}
+        </h1>
+        {pictureLoading ? (
+          <p className="mt-2 h-12 w-48 animate-pulse bg-muted" aria-label="Carregando" />
+        ) : pictureError ? (
+          <p className="mt-2 text-[15px] text-ink-out">
+            Não foi possível carregar {yearMode ? "o ano" : "o mês"}. Recarregue a página.
+          </p>
+        ) : (
+          <p
+            className={cn(
+              "mt-1 text-[48px] font-bold leading-none tracking-[-0.03em] tabular-nums",
+              deficit ? "text-ink-out" : "text-foreground",
             )}
-            {movements.isLoading ? (
-              <div className="mt-6 h-16 animate-pulse bg-muted" />
-            ) : (
+          >
+            <span className="mr-1.5 text-2xl font-medium tracking-normal">{deficit ? "−R$" : "R$"}</span>
+            {formatAmount(totals.sobra)}
+          </p>
+        )}
+        {pictureLoading ? (
+          <div className="mt-8 h-40 animate-pulse bg-muted md:h-56" />
+        ) : pictureError ? null : (
+          <>
+            <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">
+              entra {formatAmount(totals.entradas)} · sai {formatAmount(totals.saidas)}
+            </p>
+            {yearMode ? (
               <>
-                <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">
-                  entra {formatAmount(totals.entradas)} · sai {formatAmount(totals.saidas)}
-                </p>
-                <MonthPlane
-                  className="mt-6"
-                  totals={totals}
-                  onSelect={(status) => router.push(`/movements?month=${month}${status ? `&status=${status}` : ""}`)}
+                <SectionHeading>
+                  <span id="columns-heading">por mês</span>
+                </SectionHeading>
+                <PeriodColumns
+                  label="Meses do ano"
+                  columns={columns}
+                  emptyText={`Nenhum movimento em ${periodName}.`}
+                  onSelectMonth={(next) => {
+                    setMonth(next);
+                    setPeriod("month");
+                  }}
                 />
               </>
+            ) : (
+              <>
+                <MonthPlane
+                  className="mt-6"
+                  totals={monthTotals}
+                  onSelect={(status) => router.push(`/movements?month=${month}${status ? `&status=${status}` : ""}`)}
+                />
+                <MonthFlow totals={monthTotals} />
+              </>
             )}
-          </section>
+          </>
+        )}
+      </section>
 
-          <section aria-labelledby="open-heading">
-            <SectionHeading
-              aside={open.count > 0 ? <span className="tabular-nums">{open.count} em aberto</span> : null}
-            >
-              <span id="open-heading">{isCurrentMonth ? "vence agora" : `em aberto em ${name}`}</span>
-            </SectionHeading>
-            {movements.isLoading ? null : (
-              <OpenItemsList
-                list={list}
-                month={month}
-                todayStr={todayStr}
-                limit={OPEN_LIMIT}
-                onOpenPurchase={setDetailPurchaseId}
-                emptyText={`Nada em aberto em ${name}.`}
-              />
-            )}
-            {open.count > OPEN_LIMIT ? (
-              <Link
-                href={`/movements?month=${month}&status=aberto`}
-                className="mt-1 inline-block py-2 text-[15px] font-medium text-foreground underline decoration-input underline-offset-4 hover:decoration-foreground"
-              >
-                ver os {open.count} em movimentos
-              </Link>
-            ) : null}
-          </section>
-          <UpcomingSection data={dashboard.data} todayStr={todayStr} />
-        </div>
-
-        <div>
-          <BalancesSection data={dashboard.data} loading={dashboard.isLoading} />
-          <CategorySection month={month} />
-        </div>
+      <div className="md:grid md:grid-cols-2 md:gap-x-14">
+        <BalancesSection data={dashboard.data} loading={dashboard.isLoading} />
+        <CategorySection
+          yearMode={yearMode}
+          month={month}
+          lists={yearMode ? yearMovements.map((query) => query.data?.data) : [movements.data?.data]}
+          months={yearMode ? yearMonthParams(year) : undefined}
+          loading={pictureLoading}
+          error={pictureError}
+        />
       </div>
-
-      <BalanceChart data={dashboard.data?.balanceEvolution} />
 
       <div className="pt-10">
         <EnablePushCard />
       </div>
+    </div>
+  );
+}
+
+function YearSwitcher({ year, onChange }: { year: number; onChange: (next: number) => void }) {
+  return (
+    <div className="flex items-center self-end sm:self-auto">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-10"
+        onClick={() => onChange(year - 1)}
+        aria-label="Ano anterior"
+      >
+        <ChevronLeft />
+      </Button>
+      <span className="min-w-[7.5rem] text-center text-[15px] font-medium tabular-nums text-foreground">{year}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-10"
+        onClick={() => onChange(year + 1)}
+        disabled={year >= THIS_YEAR + 1}
+        aria-label="Próximo ano"
+      >
+        <ChevronRight />
+      </Button>
     </div>
   );
 }
@@ -174,7 +246,7 @@ function BalancesSection({ data, loading }: { data?: DashboardData; loading: boo
   return (
     <section aria-labelledby="balances-heading">
       <SectionHeading aside={data ? <span className="tabular-nums">{formatCurrency(data.totalBalance)}</span> : null}>
-        <span id="balances-heading">saldos</span>
+        <span id="balances-heading">saldos agora</span>
       </SectionHeading>
       {loading || !data ? (
         <p className="border-t border-border py-6 text-[15px] text-muted-foreground">Carregando saldos…</p>
@@ -197,8 +269,8 @@ function BalancesSection({ data, loading }: { data?: DashboardData; loading: boo
               </Button>
             }
           />
-          {data.pocketBalances.map((p) => (
-            <BalanceRow key={p.id} name={p.name} value={p.balance} />
+          {data.pocketBalances.map((pocket) => (
+            <BalanceRow key={pocket.id} name={pocket.name} value={pocket.balance} />
           ))}
         </ul>
       )}
@@ -207,7 +279,8 @@ function BalancesSection({ data, loading }: { data?: DashboardData; loading: boo
         <Modal open={editing} onClose={() => setEditing(false)} title="Saldo da conta corrente" size="sm">
           <div className="space-y-4">
             <p className="text-[15px] text-muted-foreground">
-              Hoje: <span className="font-medium text-foreground tabular-nums">{formatCurrency(data.checkingBalance)}</span>
+              Hoje:{" "}
+              <span className="font-medium text-foreground tabular-nums">{formatCurrency(data.checkingBalance)}</span>
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="account-new-balance">Novo saldo</Label>
@@ -242,181 +315,299 @@ function BalanceRow({ name, value, action }: { name: string; value: number; acti
   );
 }
 
-function CategorySection({ month }: { month: string }) {
-  const budget = useMonthlyBudget(month);
-  const categories = useCategories();
-  const rows = useMemo(() => {
-    if (!budget.data) return [];
-    return buildCategorySpendRows(budget.data.tree, budget.data.actualsByCategoryId, categories.data ?? []);
-  }, [budget.data, categories.data]);
-  const hasBudget = Boolean(budget.data?.budget);
-  const top = rows.slice(0, 6);
-  const max = Math.max(1, ...top.map((r) => Math.max(r.spent, r.planned)));
-  const spent = rows.reduce((s, r) => s + r.spent, 0);
-  const planned = rows.reduce((s, r) => s + r.planned, 0);
+function MonthFlow({ totals }: { totals: MonthTotals }) {
+  const entra = totals.entradas;
+  const sai = totals.saidas;
+  const sobra = Math.max(0, totals.sobra);
+  if (entra <= 0.004 && sai <= 0.004) {
+    return (
+      <p className="mt-8 border-t border-border py-6 text-[15px] text-muted-foreground">Nenhum movimento neste mês.</p>
+    );
+  }
+
+  const slices = [
+    ...(sai > 0.004 ? [{ key: "sai", value: sai, className: "fill-plane-out" }] : []),
+    ...(sobra > 0.004 ? [{ key: "sobra", value: sobra, className: "fill-plane-in" }] : []),
+  ];
+  if (slices.length === 0 && entra > 0.004) {
+    slices.push({ key: "sobra", value: entra, className: "fill-plane-in" });
+  }
+  const percents = sharePercents(slices.map((slice) => slice.value));
+  const percentOf = (key: string) => {
+    const index = slices.findIndex((slice) => slice.key === key);
+    return index >= 0 ? percents[index] : undefined;
+  };
+  const label = [
+    `entra ${formatAmount(entra)}`,
+    sai > 0.004 ? `sai ${percentOf("sai") ?? 0}% ${formatAmount(sai)}` : null,
+    sobra > 0.004 || slices.some((slice) => slice.key === "sobra")
+      ? `sobra ${percentOf("sobra") ?? 0}% ${formatAmount(sobra || entra)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <section aria-labelledby="categories-heading">
-      <SectionHeading
-        aside={
-          hasBudget ? (
-            <span className="tabular-nums">
-              {formatAmount(spent)} de {formatAmount(planned)}
-            </span>
-          ) : (
-            <Link href="/budgets" className="underline decoration-input underline-offset-4 hover:text-foreground">
-              definir orçamento
-            </Link>
-          )
-        }
-      >
-        <span id="categories-heading">por categoria</span>
-      </SectionHeading>
-      {budget.isLoading || categories.isLoading ? (
-        <p className="border-t border-border py-6 text-[15px] text-muted-foreground">Carregando…</p>
-      ) : top.length === 0 ? (
-        <p className="border-t border-border py-6 text-[15px] text-muted-foreground">Nenhum gasto neste mês.</p>
-      ) : (
-        <ul>
-          {top.map((r) => {
-            const over = r.planned > 0 && r.spent > r.planned;
-            return (
-              <li key={r.categoryId} className="border-t border-border py-3 first:border-t-0">
-                <div className="flex items-baseline gap-3">
-                  <span className="min-w-0 flex-1 truncate text-[15px] text-foreground">{r.name}</span>
-                  {over ? <span className="text-[15px] font-medium text-ink-out">acima</span> : null}
-                  <span className="text-[15px] font-medium tabular-nums text-foreground">{formatAmount(r.spent)}</span>
-                </div>
-                <div className="relative mt-2 h-3" aria-hidden>
-                  <div className="absolute inset-y-0 left-0 bg-plane-out" style={{ width: `${(r.spent / max) * 100}%` }} />
-                  {r.planned > 0 ? (
-                    <div
-                      className="absolute inset-y-0 left-0 border-2 border-foreground"
-                      style={{ width: `${(r.planned / max) * 100}%` }}
-                    />
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+    <div className="mt-8 flex flex-col gap-6 border-t border-border pt-6 sm:flex-row sm:items-center">
+      <FlatPie slices={slices} label={label} />
+      <ul className="min-w-0 flex-1">
+        <FlowRow label="entra" amount={entra} />
+        {sai > 0.004 ? (
+          <FlowRow label="sai" amount={sai} percent={percentOf("sai")} marker="bg-plane-out" />
+        ) : null}
+        {sobra > 0.004 || (sai <= 0.004 && entra > 0.004) ? (
+          <FlowRow label="sobra" amount={sobra || entra} percent={percentOf("sobra")} marker="bg-plane-in" />
+        ) : null}
+      </ul>
+    </div>
   );
 }
 
-type UpcomingEntry = { key: string; date: string; title: string; meta: string; amount: number; direction: "in" | "out" };
+function FlowRow({
+  label,
+  amount,
+  percent,
+  marker,
+}: {
+  label: string;
+  amount: number;
+  percent?: number;
+  marker?: string;
+}) {
+  return (
+    <li className="flex min-h-12 items-center gap-3 border-t border-border py-2 first:border-t-0">
+      {marker ? <span className={cn("size-2.5 shrink-0", marker)} aria-hidden /> : <span className="size-2.5 shrink-0" />}
+      <span className="min-w-0 flex-1 truncate text-[15px] text-foreground">{label}</span>
+      {percent != null ? (
+        <span className="text-[15px] font-medium tabular-nums text-foreground">{percent}%</span>
+      ) : null}
+      <span className="text-[15px] font-medium tabular-nums text-foreground">{formatAmount(amount)}</span>
+    </li>
+  );
+}
 
-function UpcomingSection({ data, todayStr }: { data?: DashboardData; todayStr: string }) {
-  const entries = useMemo<UpcomingEntry[]>(() => {
-    if (!data) return [];
-    const all: UpcomingEntry[] = [
-      ...data.upcomingRecurring.map((r) => ({
-        key: `rec-${r.title}-${r.nextExecutionDate}`,
-        date: r.nextExecutionDate,
-        title: r.title,
-        meta: "recorrente",
-        amount: r.amount,
-        direction: "out" as const,
-      })),
-      ...data.upcomingInstallments.map((i) => ({
-        key: `inst-${i.title}-${i.purchaseDate}-${i.installmentNumber}`,
-        date: i.purchaseDate,
-        title: i.title,
-        meta: [`parcela ${i.installmentNumber}/${i.installmentCount}`, i.cardName].filter(Boolean).join(" · "),
-        amount: i.amount,
-        direction: "out" as const,
-      })),
-      ...data.upcomingRecurringDeposits.map((d, idx) => ({
-        key: `dep-${d.nextExecutionDate}-${idx}`,
-        date: d.nextExecutionDate,
-        title: d.title,
-        meta: d.destinationSummary,
-        amount: d.amount,
-        direction: "in" as const,
-      })),
-    ];
-    return all.filter((e) => e.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
-  }, [data, todayStr]);
+function CategorySection({
+  yearMode,
+  month,
+  lists,
+  months,
+  loading,
+  error,
+}: {
+  yearMode: boolean;
+  month: string;
+  lists: Array<MonthMovementRow[] | undefined>;
+  months?: string[];
+  loading: boolean;
+  error: boolean;
+}) {
+  const budget = useMonthlyBudget(yearMode ? null : month);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [chart, setChart] = useState<"pizza" | "meses">("pizza");
+  const [focus, setFocus] = useState<string | null>(null);
+  const categories = useMemo(() => categorySlicesFromMovements(lists), [lists]);
+  const selected = categories.some((row) => row.name === picked) ? picked : null;
+  const rows = useMemo(
+    () => (selected ? tagSlicesForCategory(lists, selected) : categories),
+    [selected, lists, categories],
+  );
+  const byMonth = useMemo(() => {
+    if (!yearMode || !months) return [];
+    return monthlyGroups(months, lists, rows, selected);
+  }, [yearMode, months, lists, rows, selected]);
+  const summary = rows.map((row) => `${row.name} ${row.percent}%`).join(", ");
+  const showMonths = yearMode && chart === "meses";
 
   return (
-    <section aria-labelledby="upcoming-heading">
-      <SectionHeading>
-        <span id="upcoming-heading">próximos</span>
+    <section aria-labelledby="categories-heading" className="md:pr-20">
+      <SectionHeading
+        aside={
+          selected ? (
+            <button
+              type="button"
+              onClick={() => setPicked(null)}
+              className="underline decoration-input underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              categorias
+            </button>
+          ) : !yearMode && budget.data && !budget.data.budget ? (
+            <Link href="/budgets" className="underline decoration-input underline-offset-4 hover:text-foreground">
+              definir orçamento
+            </Link>
+          ) : null
+        }
+      >
+        <span id="categories-heading">{selected ?? "por categoria"}</span>
       </SectionHeading>
-      {!data ? null : entries.length === 0 ? (
-        <p className="border-t border-border py-6 text-[15px] text-muted-foreground">Nada agendado.</p>
+      {yearMode && !loading && !error && rows.length > 0 ? (
+        <ToggleGroup
+          type="single"
+          value={chart}
+          onValueChange={(value) => {
+            if (value === "pizza" || value === "meses") setChart(value);
+          }}
+          aria-label={selected ? "Gráfico das tags" : "Gráfico das categorias"}
+          className="mb-1 gap-0 border border-input"
+        >
+          <ToggleGroupItem value="pizza" className="h-8 px-3 text-[15px] data-[state=on]:bg-foreground data-[state=on]:text-background">
+            pizza
+          </ToggleGroupItem>
+          <ToggleGroupItem value="meses" className="h-8 px-3 text-[15px] data-[state=on]:bg-foreground data-[state=on]:text-background">
+            por mês
+          </ToggleGroupItem>
+        </ToggleGroup>
+      ) : null}
+      {loading ? (
+        <p className="border-t border-border py-6 text-[15px] text-muted-foreground">Carregando…</p>
+      ) : error ? (
+        <p className="border-t border-border py-6 text-[15px] text-ink-out">
+          Não foi possível carregar as categorias. Recarregue a página.
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="border-t border-border py-6 text-[15px] text-muted-foreground">
+          Nenhum gasto {yearMode ? "neste ano" : "neste mês"}.
+        </p>
+      ) : showMonths ? (
+        <CategoryColumns
+          groups={byMonth}
+          active={[focus, month].find((value) => value && byMonth.some((group) => group.month === value)) ?? byMonth.at(-1)?.month}
+          onSelect={setFocus}
+          onPick={selected ? undefined : setPicked}
+        />
       ) : (
-        <div>
-          {entries.map((e) => (
-            <LedgerRow
-              key={e.key}
-              tile={<DayTile day={dayOfMonth(e.date)} tone={e.direction === "in" ? "forecast-in" : "forecast"} />}
-              title={e.title}
-              meta={`${e.date.slice(8, 10)}/${e.date.slice(5, 7)} · ${e.meta}`}
-              amount={
-                <span className={e.direction === "in" ? "text-ink-in" : undefined}>
-                  {formatAmount(e.amount, e.direction === "in" ? "+" : "−")}
-                </span>
-              }
-            />
-          ))}
+        <div className="flex flex-col gap-6 border-t border-border pt-6 sm:flex-row sm:items-start">
+          <FlatPie
+            slices={rows.map((row) => ({ key: row.name, value: row.spent, fill: row.color }))}
+            label={summary}
+            onSelect={selected ? undefined : setPicked}
+          />
+          <ul className="min-w-0 flex-1">
+            {rows.map((row) => (
+              <li key={row.name}>
+                <SpendRow row={row} onPick={selected ? undefined : setPicked} />
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>
   );
 }
 
-const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
-
-function BalanceChart({ data }: { data?: DashboardData["balanceEvolution"] }) {
-  if (!data || data.length < 2) return null;
+function SliceLabel({ row }: { row: CategorySlice }) {
   return (
-    <section aria-labelledby="chart-heading">
-      <SectionHeading>
-        <span id="chart-heading">saldo ao longo do tempo</span>
-      </SectionHeading>
-      <div className="h-56 border-t border-border pt-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="var(--border)" />
-            <XAxis
-              dataKey="date"
-              stroke="var(--muted-foreground)"
-              tickLine={false}
-              axisLine={false}
-              fontSize={15}
-              minTickGap={24}
-            />
-            <YAxis
-              stroke="var(--muted-foreground)"
-              tickLine={false}
-              axisLine={false}
-              fontSize={15}
-              width={44}
-              tickFormatter={(v) => compact.format(Number(v))}
-            />
-            <Tooltip
-              formatter={(v) => [formatCurrency(Number(v) || 0), "Saldo"]}
-              cursor={{ stroke: "var(--input)" }}
-              contentStyle={{
-                backgroundColor: "var(--popover)",
-                border: "1px solid var(--border)",
-                borderRadius: 0,
-                color: "var(--foreground)",
-              }}
-            />
-            <Line
-              type="linear"
-              dataKey="balance"
-              stroke="var(--plane-in)"
-              strokeWidth={2.5}
-              dot={false}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+    <>
+      <span className="size-2.5 shrink-0" style={{ backgroundColor: row.color }} aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-[15px] text-foreground">{row.name}</span>
+      <span className="text-[15px] font-medium tabular-nums text-foreground">
+        {row.percent === 0 && row.spent > 0.004 ? "<1%" : `${row.percent}%`}
+      </span>
+      <span className="text-[15px] font-medium tabular-nums text-foreground">{formatAmount(row.spent)}</span>
+    </>
+  );
+}
+
+function SpendRow({ row, onPick }: { row: CategorySlice; onPick?: (name: string) => void }) {
+  if (!onPick) {
+    return (
+      <div className="flex min-h-12 items-center gap-3 border-t border-border py-2">
+        <SliceLabel row={row} />
       </div>
-    </section>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(row.name)}
+      className="flex min-h-12 w-full items-center gap-3 border-t border-border py-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <SliceLabel row={row} />
+    </button>
+  );
+}
+
+function CategoryColumns({
+  groups,
+  active,
+  onSelect,
+  onPick,
+}: {
+  groups: MonthGroup[];
+  active?: string;
+  onSelect: (month: string) => void;
+  onPick?: (name: string) => void;
+}) {
+  const totals = groups.map((group) => group.slices.reduce((sum, slice) => sum + slice.spent, 0));
+  const max = Math.max(0, ...totals);
+  const open = groups.find((group) => group.month === active);
+
+  return (
+    <div className="border-t border-border pt-6">
+      <ul className="flex h-40 items-end gap-[3px] border-b border-border md:h-56" aria-label="Gasto por mês">
+        {groups.map((group, index) => {
+          const total = totals[index] ?? 0;
+          const summary = total > 0.004 ? `${group.label}, ${formatAmount(total)}` : `${group.label}, nenhum gasto`;
+          return (
+            <li key={group.month} className="flex h-full min-w-0 flex-1 items-end">
+              <button
+                type="button"
+                aria-pressed={group.month === active}
+                aria-label={summary}
+                onClick={() => onSelect(group.month)}
+                className="group flex h-full w-full items-end focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <ColumnStack slices={group.slices} total={total} max={max} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <ul className="mt-2 flex gap-[3px]" aria-hidden>
+        {groups.map((group) => (
+          <li
+            key={group.month}
+            className={cn(
+              "min-w-0 flex-1 truncate border-b-2 pb-1 text-center text-[12px] leading-none",
+              group.month === active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground",
+            )}
+          >
+            {monthAbbrev(group.month)}
+          </li>
+        ))}
+      </ul>
+      {open ? (
+        <div className="pt-4">
+          <p className="text-[15px] font-medium lowercase text-muted-foreground">{open.label}</p>
+          {open.slices.length === 0 ? (
+            <p className="border-t border-border py-3 text-[15px] text-foreground">—</p>
+          ) : (
+            <ul>
+              {open.slices.map((row) => (
+                <li key={row.name}>
+                  <SpendRow row={row} onPick={onPick} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ColumnStack({ slices, total, max }: { slices: CategorySlice[]; total: number; max: number }) {
+  if (total <= 0.004 || max <= 0.004) {
+    return <span className="mb-px block h-3 w-full border border-dashed border-input" aria-hidden />;
+  }
+  return (
+    <span className="plane-column flex w-full flex-col justify-end" style={{ height: `${(total / max) * 100}%` }} aria-hidden>
+      {[...slices].reverse().map((slice) => (
+        <span
+          key={slice.name}
+          className="w-full group-hover:brightness-110"
+          style={{ flexGrow: slice.spent, flexBasis: 0, backgroundColor: slice.color }}
+        />
+      ))}
+    </span>
   );
 }

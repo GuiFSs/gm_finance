@@ -19,6 +19,8 @@ export type MonthMovementRow = {
   title: string;
   amount: number;
   category?: string | null;
+  /** Nomes das tags da compra, quando a linha vem de uma compra. */
+  tags?: string[];
   source?: string | null;
   sourceType?: "account" | "pocket" | "card";
   sourceId?: string | null;

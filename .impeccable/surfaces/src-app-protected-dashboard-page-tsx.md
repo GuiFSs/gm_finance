@@ -9,7 +9,7 @@ related_targets: ["src/app/(protected)/movements/page.tsx","src/app/(protected)/
 
 Scope: the three most-used screens (`/dashboard`, `/movements`, `/purchases`) plus the app shell they sit in. Mode: Operate. Phone first (PWA), desktop secondary.
 
-Job: answer "quanto sobra este mês", show what is still open or due so it can be marked paid, and log a new compra in one tap. User pains: too much scrolling, too much explanatory text.
+Job: início answers sobra for the month or the year. Movimentos keeps the lists and the paid checks. Compras logs a compra in one tap.
 
 Constraints: pt-BR copy; keep every existing function (month navigation, Pago toggles, fatura paid, pagamento da fatura modal, purchase detail/edit/delete, filters, sort, nova categoria/tag, voice FAB). Other routes are not redesigned now; they inherit the new tokens.
 
@@ -19,9 +19,9 @@ THESIS: The month is a concrete composition. Money is drawn as flat planes whose
 
 OWN-WORLD: Brazilian concrete art (Grupo Ruptura, Noigandres). Near-black ground, off-white ink, three flat pigments in planes only: vermelho for money out/paid, amarelo for open/due, azul for money in/what's left. Square corners everywhere, 1px rules, lowercase Futura-lineage headings (Jost), tabular figures. Colour lives in planes and markers; amounts stay in ink with a sign.
 
-STORY: Open the app, read what's left in one number, see the month split into pago / em aberto / previsto / sobra, tick what got paid, tap + to log a compra.
+STORY: Open the app, read what's left in one number, see the month as a plane and as a pie of entra, sai and sobra, or switch to the year and see the twelve months. Categories are a pie with each share written as a percent; spending with no category reads "sem categoria". Opening a category shows its tags, each in its own color. In the year, pizza | por mês switches that section to twelve columns drawn like the year chart, each column a month stacked in category colors. Tapping a column lists that month's shares. Opening a category redraws the columns in tag colors. Tick what got paid on movimentos.
 
-FIRST VIEWPORT: Phone. Top strip: wordmark and month switcher. "sobra em novembro" lowercase over a 52px amount. A full-width 64px plane bar with a four-line legend. "vence agora" with dated rows (a square day tile, title, source, amount, Pago check). Bottom tab bar: início, movimentos, + (nova compra), compras, mais.
+FIRST VIEWPORT: Phone. Top strip: wordmark, mês | ano, and the month or year switcher. "sobra em novembro" or "falta em 2026" over the amount, then entra · sai. Month: the plane bar, then the pie. Year: "por mês", twelve columns. Below, "saldos agora" and "por categoria". Bottom tab bar: início, movimentos, + (nova compra), compras, mais.
 
 FORM: Concreto, candidate 7 of 7 on the grounded list. seed:29f3eb64df3fcb8d. Raises: three type sizes, ranked by weight (timetable slide rack); nothing labeled twice (Factory sleeve); a paid row moves in place and the bar replans (boarding pass); every plane filters to its rows (monochrome marketing). Signature move: the month plane bar, tappable, on Dashboard and Movimentos.
 

@@ -257,6 +257,8 @@ The month as one row of planes, 64px tall (48px compact), full width. Segment wi
 
 Below it, a two-column legend: 10px square marker, pencil label, ink amount (sobra omits its amount because the display number already states it). Each legend entry and each segment is a filter: tapping selects that status, dims the other segments to 25% opacity and filters the rows; tapping again clears.
 
+On the dashboard the month is also a flat pie of what came in. Vermelho is what went out, azul is what was left, and the legend names entra as the whole rather than as a third slice. There is no falta slice. Categories are a second pie, split by a gap of ground, and each category's share of spending is written as a percent beside a matching color marker. Each category keeps its own flat color, stepped so neighboring slices differ; a purchase with no category is the gray slice "sem categoria". These colors stay on that pie. In the year the same section switches between the pie and twelve columns drawn like the year chart: each column is a month, stacked in the category colors, largest at the base, empty months a dashed stub. Tapping a column lists that month's categories with color, share, and amount. Opening a category redraws the columns in that category's tag colors. The month plane and the entra/sai pie keep the three pigments. In the year, twelve columns replace the pie: the same pigments, a deficit column keeps the striped overlay, and tapping a column returns to that month. Axis labels there use the 12px chrome size, because twelve of them share a phone width.
+
 ### Ledger Row and Day Tile
 The list grammar of every redesigned screen. A row is a 40px square day tile, a two-line text block (15px/500 title in ink, 15px meta in pencil, both truncating), a right-aligned 15px/500 signed amount in ink, and an optional action. Rows are separated by 1px rules, 12px vertical padding; the whole row is a button with a hover-slab tint when it opens a detail.
 
@@ -282,4 +284,4 @@ A 24px square box with a 2px ink border inside a 44px hit area. Checked, it fill
 - **Don't** label a value twice or add explanatory copy under numbers and headings.
 - **Don't** add shadows, rounded corners, smooth gradients or tinted backgrounds; hard 135° stripes are reserved for the deficit.
 - **Don't** add uppercase or letter-spaced labels above headings.
-- **Don't** introduce a fourth hue for categories, tags or status.
+- **Don't** introduce a fourth hue for tags or status. The category pie is the one exception, shared with the year category columns: each category keeps one flat color there, and each tag keeps one flat color on its own pie and columns.

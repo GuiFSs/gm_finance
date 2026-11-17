@@ -53,6 +53,8 @@ Nav: shell em `src/shared/ui/app-shell.tsx` (rotas protegidas via `(protected)/l
 
 Query params: `/purchases?new=1` abre o form de nova compra; `/purchases?edit=<id>` abre a edição. `/movements?month=YYYY-MM&status=pago|aberto|previsto|entradas` (±12 meses) filtra a lista; o dashboard usa isso ao clicar no plano do mês.
 
+`/dashboard` é a leitura do mês ou do ano: sobra (mesma conta de `computeMonthTotals`, por mês de vencimento), plano do mês, pizza de entra/sai/sobra no mês, 12 colunas no ano, saldos de agora e pizza por categoria (porcentagem; sem categoria = "sem categoria"). Clicar uma categoria abre a pizza das tags dela (sem tag = "sem tag"). No ano, pizza | por mês troca essa seção por doze colunas no mesmo desenho do gráfico do ano: cada coluna é um mês empilhado nas cores das categorias. Tocar a coluna lista a porcentagem e o valor daquele mês. A categoria aberta redesenha as colunas nas cores das tags. Marcar pago fica em movimentos.
+
 ## APIs (resumo)
 
 | Área | Endpoints |

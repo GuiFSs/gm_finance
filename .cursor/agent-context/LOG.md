@@ -2,6 +2,55 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — colunas de categoria no ano
+
+- Status: `pronto-para-revisar`
+- Resumo: No ano, "por mês" das categorias virou doze colunas no mesmo desenho do gráfico do início da tela. Cada coluna é um mês empilhado nas cores das categorias. Tocar a coluna mostra porcentagem e valor. A categoria aberta redesenha as colunas com as tags.
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`
+- Próximo: nenhum nesta tela
+
+## 2026-11-17 — categorias mês a mês no ano
+
+- Status: `pronto-para-revisar`
+- Resumo: No ano, a seção de categorias alterna entre a pizza e uma lista dos doze meses. Cada mês mostra cada categoria com cor, porcentagem daquele mês e valor. A categoria aberta faz o mesmo com as tags. A barra de uma categoria só saiu.
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`, `src/features/dashboard/category-spend.ts`
+- Próximo: nenhum nesta tela
+
+## 2026-11-17 — gasto mensal da categoria no ano
+
+- Status: `pronto-para-revisar`
+- Resumo: No ano, abrir uma categoria mostra doze barras horizontais (jan–dez) com o valor ao lado. Clicar uma tag filtra essas barras. A pizza da categoria e a das tags continuam. No mês essa lista não aparece.
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`, `src/features/dashboard/category-spend.ts`
+- Próximo: nenhum nesta tela
+
+## 2026-11-17 — tags ao clicar na categoria
+
+- Status: `pronto-para-revisar`
+- Resumo: Clicar numa categoria (fatia ou linha) abre a mesma pizza para as tags daquela categoria. Sem tag aparece como "sem tag". "categorias" volta. Movimentos passam a trazer os nomes das tags.
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`, `category-spend.ts`, `src/shared/lib/finance-service.ts`
+- Próximo: nenhum nesta tela
+
+## 2026-11-17 — cores na pizza de categoria
+
+- Status: `pronto-para-revisar`
+- Resumo: Cada categoria ganhou uma cor fixa na pizza e no marcador da lista. "sem categoria" fica cinza. As cores não entram no plano do mês nem na pizza de entra/sai.
+- Arquivos-chave: `src/features/dashboard/category-spend.ts`, `flat-pie.tsx`, `dashboard-overview.tsx`
+- Próximo: nenhum nesta tela
+
+## 2026-11-17 — pizzas no dashboard
+
+- Status: `pronto-para-revisar`
+- Resumo: Saiu o gráfico por semana. O mês ganhou uma pizza de entra (o todo), sai e sobra, sem fatia "falta". Por categoria virou pizza com a porcentagem de cada uma; compra sem categoria aparece como "sem categoria".
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`, `flat-pie.tsx`, `category-spend.ts`
+- Próximo: smoke do toggle Pago em `/movements`
+
+## 2026-11-17 — dashboard lê mês ou ano
+
+- Status: `pronto-para-revisar`
+- Resumo: `/dashboard` deixou de ser uma segunda lista. Mostra a sobra do mês (plano + colunas por semana) ou do ano (12 colunas), saldos de agora e gasto por categoria. Marcar pago continua em movimentos. Mesma conta de `computeMonthTotals`.
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`, `period-model.ts`, `period-chart.tsx`, `use-period-data.ts`, `category-spend.ts`
+- Próximo: smoke do toggle Pago em `/movements`; migrar as outras rotas
+
 ## 2026-11-17 — redesign "Concreto" (dashboard, movimentos, compras)
 
 - Status: `pronto-para-revisar`
