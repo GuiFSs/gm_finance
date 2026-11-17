@@ -2,6 +2,17 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — visual Concreto em todas as rotas
+
+- Status: `pronto-para-revisar`
+- Resumo:
+  - Orçamento, categorias, caixinhas, cartões, recorrentes, metas, depósitos, login e todos os diálogos agora usam o visual Concreto: 15px, cantos retos, figura-resposta e um plano por tela.
+  - Os primitivos de `src/shared/ui` foram reestilizados.
+  - Recorrentes perdeu as abas. Excluir foi para dentro dos modais de edição.
+  - A revisão final deu `ship`.
+- Arquivos-chave: `src/features/month/plane-bar.tsx`, `src/shared/ui/page-header.tsx`, `src/features/budgets/budget-allocation-rows.tsx`, `src/features/deposits/deposit-management.tsx`, `DESIGN.md`
+- Próximo: commitar e fazer o smoke de CRUD no banco real
+
 ## 2026-11-17 — colunas de categoria no ano
 
 - Status: `pronto-para-revisar`

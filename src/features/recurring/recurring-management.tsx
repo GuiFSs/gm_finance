@@ -1,7 +1,7 @@
 "use client";
 
-import { Pencil, Repeat, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Play, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
@@ -21,21 +21,34 @@ import {
   useUpdateRecurring,
   type RecurringRow,
 } from "@/shared/hooks/use-app-data";
+import { AnswerFigure, DayTile, LedgerRow, LedgerSkeleton } from "@/features/month/ledger";
+import { dayOfMonth, daysFromToday, formatAmount, todayYmd } from "@/features/month/month-model";
+import { PlaneBar, PlaneLegend } from "@/features/month/plane-bar";
 import { toInputDate, formatCurrency, formatDisplayDate } from "@/shared/utils/formatters";
 import { Button } from "@/shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { Field, FormActions, PageHeader } from "@/shared/ui/page-header";
 import { SelectOptions } from "@/shared/ui/select-options";
-import { cn } from "@/shared/lib/cn";
 
 const PAYMENT_LABEL: Record<string, string> = {
-  account: "Conta corrente",
-  pocket: "Caixinha",
-  card: "Cartão de crédito",
+  account: "conta",
+  pocket: "caixinha",
+  card: "cartão",
 };
+
+/** Vence em até dois dias: o mesmo amarelo cheio dos movimentos. */
+const SOON_DAYS = 2;
+
+function nextWord(ymd: string, todayStr: string): string {
+  const diff = daysFromToday(ymd, todayStr);
+  if (diff < 0) return `atrasado desde ${formatDisplayDate(ymd).slice(0, 5)}`;
+  if (diff === 0) return "hoje";
+  if (diff === 1) return "amanhã";
+  if (diff <= 31) return `em ${diff} dias`;
+  return formatDisplayDate(ymd);
+}
 
 async function resolveRecurringTagIds(
   raw: string,
@@ -75,8 +88,6 @@ const schema = z.object({
   categoryId: z.string().optional(),
 });
 
-type TabId = "all" | "upcoming";
-
 export function RecurringManagement() {
   const currentUser = useCurrentUser();
   const recurring = useRecurring();
@@ -90,7 +101,6 @@ export function RecurringManagement() {
   const tags = useTags();
   const createTag = useCreateTag();
 
-  const [activeTab, setActiveTab] = useState<TabId>("all");
   const [openCreate, setOpenCreate] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringRow | null>(null);
   const [deletingItem, setDeletingItem] = useState<RecurringRow | null>(null);
@@ -184,6 +194,7 @@ export function RecurringManagement() {
     await deleteRecurring.mutateAsync(deletingItem.id);
     toast.success("Despesa recorrente excluída");
     setDeletingItem(null);
+    setEditingItem(null);
   };
 
   const onRun = async () => {
@@ -191,349 +202,237 @@ export function RecurringManagement() {
     toast.success("Execução dos recorrentes concluída");
   };
 
-  const list = recurring.data ?? [];
+  const list = useMemo(
+    () => [...(recurring.data ?? [])].sort((a, b) => a.nextExecutionDate.localeCompare(b.nextExecutionDate)),
+    [recurring.data],
+  );
   const isLoading = recurring.isLoading;
+  const todayStr = todayYmd();
+  const total = list.reduce((s, r) => s + r.amount, 0);
+  const isSoon = (r: RecurringRow) => daysFromToday(r.nextExecutionDate, todayStr) <= SOON_DAYS;
+  const soonTotal = list.filter(isSoon).reduce((s, r) => s + r.amount, 0);
+  const byDay = [...list].sort(
+    (a, b) => Number(a.nextExecutionDate.slice(8, 10)) - Number(b.nextExecutionDate.slice(8, 10)),
+  );
+
+  const closeForm = () => {
+    setOpenCreate(false);
+    setEditingItem(null);
+    setTagsField("");
+  };
+
+  const formFields = (prefix: string) => (
+    <>
+      <Field label="Título" htmlFor={`${prefix}-title`}>
+        <Input id={`${prefix}-title`} placeholder="Ex: Aluguel" {...form.register("title")} />
+      </Field>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Valor por mês" htmlFor={`${prefix}-amount`}>
+          <CurrencyInput
+            id={`${prefix}-amount`}
+            value={form.watch("amount") ?? 0}
+            onChange={(v) => form.setValue("amount", v)}
+          />
+        </Field>
+        <Field label="Próxima vez" htmlFor={`${prefix}-next`}>
+          <Input id={`${prefix}-next`} type="date" {...form.register("nextExecutionDate")} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Pagar com">
+          <SelectOptions
+            aria-label="Pagar com"
+            value={paymentSourceType}
+            onValueChange={(v) => {
+              form.setValue("paymentSourceType", v as "account" | "pocket" | "card");
+              form.setValue("paymentSourceId", undefined);
+            }}
+            options={[
+              { value: "account", label: "Conta corrente" },
+              { value: "pocket", label: "Caixinha" },
+              { value: "card", label: "Cartão de crédito" },
+            ]}
+          />
+        </Field>
+        {paymentSourceType !== "account" ? (
+          <Field label={paymentSourceType === "card" ? "Cartão" : "Caixinha"}>
+            <SelectOptions
+              aria-label={paymentSourceType === "card" ? "Cartão" : "Caixinha"}
+              value={paymentSourceId ?? ""}
+              onValueChange={(v) => form.setValue("paymentSourceId", v || undefined)}
+              options={[{ value: "", label: "Selecione" }, ...sourceOptions]}
+            />
+          </Field>
+        ) : null}
+      </div>
+      <Field label="Categoria">
+        <SelectOptions
+          aria-label="Categoria"
+          value={form.watch("categoryId") ?? ""}
+          onValueChange={(v) => form.setValue("categoryId", v || undefined)}
+          options={categoryOptions}
+        />
+      </Field>
+      <Field label="Tags" htmlFor={`${prefix}-tags`} hint="Separadas por vírgula; as novas são criadas.">
+        <Input
+          id={`${prefix}-tags`}
+          placeholder="Ex: casa, mensal"
+          value={tagsField}
+          onChange={(e) => setTagsField(e.target.value)}
+        />
+      </Field>
+    </>
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Barra: abas + ações */}
-      <Card>
-        <div className="flex flex-col gap-4 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex min-w-0 flex-wrap gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("all")}
-              className={cn(
-                "rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors sm:px-3",
-                activeTab === "all"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              Despesas recorrentes
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("upcoming")}
-              className={cn(
-                "rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors sm:px-3",
-                activeTab === "upcoming"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              Próximos recorrentes
-            </button>
-          </div>
-          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button className="w-full sm:w-auto" onClick={openCreateModal}>
-              Nova despesa recorrente
+    <div className="pb-4">
+      <PageHeader
+        title="recorrentes"
+        actions={
+          <>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={onRun} disabled={runRecurring.isPending}>
+              <Play aria-hidden />
+              {runRecurring.isPending ? "lançando…" : "lançar vencidos"}
             </Button>
-            <Button
-              className="w-full sm:w-auto"
-              variant="outline"
-              onClick={onRun}
-              disabled={runRecurring.isPending}
-            >
-              {runRecurring.isPending ? "Executando..." : "Executar agora"}
+            <Button size="sm" className="gap-1.5" onClick={openCreateModal}>
+              <Plus aria-hidden />
+              nova
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        <Modal
-          open={openCreate}
-          onClose={() => {
-            setOpenCreate(false);
-            setTagsField("");
-          }}
-          title="Nova despesa recorrente"
-          size="lg"
-        >
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="recurring-title">Título</Label>
-              <Input id="recurring-title" placeholder="Ex: Aluguel" {...form.register("title")} />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Valor</Label>
-                <CurrencyInput
-                  value={form.watch("amount") ?? 0}
-                  onChange={(v) => form.setValue("amount", v)}
-                />
-              </div>
-              <div>
-                <Label>Próxima execução</Label>
-                <Input type="date" {...form.register("nextExecutionDate")} />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Forma de pagamento</Label>
-                <SelectOptions
-                  value={paymentSourceType}
-                  onValueChange={(v) => form.setValue("paymentSourceType", v as "account" | "pocket" | "card")}
-                  options={[
-                    { value: "account", label: "Conta corrente" },
-                    { value: "pocket", label: "Caixinha" },
-                    { value: "card", label: "Cartão de crédito" },
-                  ]}
-                />
-              </div>
-              <div>
-                <Label>Fonte</Label>
-                <SelectOptions
-                  value={paymentSourceId ?? ""}
-                  onValueChange={(v) => form.setValue("paymentSourceId", v || undefined)}
-                  options={sourceOptions}
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Categoria</Label>
-              <SelectOptions
-                value={form.watch("categoryId") ?? ""}
-                onValueChange={(v) => form.setValue("categoryId", v || undefined)}
-                options={categoryOptions}
-              />
-            </div>
-            <div>
-              <Label htmlFor="recurring-tags">Tags</Label>
-              <Input
-                id="recurring-tags"
-                placeholder="Ex: mercado, mensal"
-                value={tagsField}
-                onChange={(e) => setTagsField(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Nomes de tags já cadastradas ou novas, separados por vírgula (iguais à despesa normal).
-              </p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setOpenCreate(false);
-                  setTagsField("");
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={createRecurring.isPending}>
-                {createRecurring.isPending ? "Salvando..." : "Salvar"}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-
-        <Modal
-          open={!!editingItem}
-          onClose={() => {
-            setEditingItem(null);
-            setTagsField("");
-          }}
-          title="Editar despesa recorrente"
-          size="lg"
-        >
-          <form onSubmit={onEditSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="edit-recurring-title">Título</Label>
-              <Input id="edit-recurring-title" placeholder="Ex: Aluguel" {...form.register("title")} />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Valor</Label>
-                <CurrencyInput
-                  value={form.watch("amount") ?? 0}
-                  onChange={(v) => form.setValue("amount", v)}
-                />
-              </div>
-              <div>
-                <Label>Próxima execução</Label>
-                <Input type="date" {...form.register("nextExecutionDate")} />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Forma de pagamento</Label>
-                <SelectOptions
-                  value={paymentSourceType}
-                  onValueChange={(v) => form.setValue("paymentSourceType", v as "account" | "pocket" | "card")}
-                  options={[
-                    { value: "account", label: "Conta corrente" },
-                    { value: "pocket", label: "Caixinha" },
-                    { value: "card", label: "Cartão de crédito" },
-                  ]}
-                />
-              </div>
-              <div>
-                <Label>Fonte</Label>
-                <SelectOptions
-                  value={paymentSourceId ?? ""}
-                  onValueChange={(v) => form.setValue("paymentSourceId", v || undefined)}
-                  options={sourceOptions}
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Categoria</Label>
-              <SelectOptions
-                value={form.watch("categoryId") ?? ""}
-                onValueChange={(v) => form.setValue("categoryId", v || undefined)}
-                options={categoryOptions}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-recurring-tags">Tags</Label>
-              <Input
-                id="edit-recurring-tags"
-                placeholder="Ex: mercado, mensal"
-                value={tagsField}
-                onChange={(e) => setTagsField(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Nomes de tags já cadastradas ou novas, separados por vírgula (iguais à despesa normal).
-              </p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingItem(null);
-                  setTagsField("");
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={updateRecurring.isPending}>
-                {updateRecurring.isPending ? "Salvando..." : "Salvar"}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-
-        <Modal
-          open={!!deletingItem}
-          onClose={() => setDeletingItem(null)}
-          title="Excluir despesa recorrente"
-          size="sm"
-        >
-          <div className="space-y-4">
-            {deletingItem && (
-              <p className="text-sm text-muted-foreground">
-                Tem certeza que deseja excluir <strong className="text-foreground">{deletingItem.title}</strong> (
-                {formatCurrency(deletingItem.amount)})? Esta ação não pode ser desfeita.
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setDeletingItem(null)}>
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={onConfirmDelete}
-                disabled={deleteRecurring.isPending}
-              >
-                {deleteRecurring.isPending ? "Excluindo..." : "Excluir"}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-
-        {/* Conteúdo da aba */}
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            {activeTab === "all" ? "Todas as despesas recorrentes" : "Próximas execuções"}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {activeTab === "all"
-              ? "Lista de gastos que se repetem mensalmente."
-              : "Ordenado pela data da próxima execução."}
-          </p>
-        </CardHeader>
-        <CardContent>
+      {list.length > 0 || isLoading ? (
+        <section aria-label="Resumo dos recorrentes" className="pt-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-end md:gap-10">
+          <AnswerFigure
+            label="fixo por mês"
+            value={formatAmount(total)}
+            loading={isLoading}
+            meta={`${list.length} ${list.length === 1 ? "recorrente" : "recorrentes"}`}
+          />
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <p className="text-sm text-muted-foreground">Carregando...</p>
-            </div>
-          ) : list.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-              <div className="rounded-full bg-muted p-4">
-                <Repeat className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <p className="font-medium text-foreground">Nenhuma despesa recorrente</p>
-              <p className="text-sm text-muted-foreground">
-                Crie uma para despesas que se repetem todo mês (aluguel, assinaturas, etc.).
-              </p>
-              <Button onClick={openCreateModal}>Nova despesa recorrente</Button>
-            </div>
+            <div className="mt-5 h-12 animate-pulse bg-muted md:mt-0" />
           ) : (
-            <ul className="space-y-3">
-              {list.map((item) => (
-                <li key={item.id}>
-                  <Card className="overflow-hidden transition-colors hover:bg-muted/30">
-                    <CardContent className="p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-foreground">{item.title}</p>
-                          <p className="mt-0.5 text-sm text-muted-foreground">
-                            Próxima execução: {formatDisplayDate(item.nextExecutionDate)}
-                            <span className="mx-1.5">·</span>
-                            <span>{PAYMENT_LABEL[item.paymentSourceType] ?? item.paymentSourceType}</span>
-                            {item.categoryName && (
-                              <>
-                                <span className="mx-1.5">·</span>
-                                <span>{item.categoryName}</span>
-                              </>
-                            )}
-                            {item.tags.length > 0 && (
-                              <>
-                                <span className="mx-1.5">·</span>
-                                <span>{item.tags.map((t) => `#${t.name}`).join(" ")}</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <p className="text-lg font-semibold tabular-nums text-foreground">
-                            {formatCurrency(item.amount)}
-                          </p>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEdit(item)}
-                              aria-label="Editar"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => setDeletingItem(item)}
-                              aria-label="Excluir"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-5 md:mt-0">
+              <PlaneBar
+                label={`Recorrentes na ordem do mês: ${byDay.map((r) => `${r.title} ${formatAmount(r.amount)}`).join(", ")}`}
+                segments={byDay.map((r) => ({
+                  key: r.id,
+                  value: r.amount,
+                  tone: isSoon(r) ? ("open" as const) : ("forecast" as const),
+                  onSelect: () => openEdit(r),
+                }))}
+              />
+              <PlaneLegend
+                className="mt-3"
+                items={[
+                  { key: "soon", label: "até 2 dias", tone: "open", amount: formatAmount(soonTotal), value: soonTotal },
+                  { key: "later", label: "depois", tone: "forecast", amount: formatAmount(total - soonTotal), value: total - soonTotal },
+                ]}
+              />
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </section>
+      ) : null}
+
+      {isLoading ? (
+        <LedgerSkeleton />
+      ) : recurring.isError ? (
+        <p className="py-10 text-[15px] text-ink-out">Não foi possível carregar os recorrentes. Recarregue a página.</p>
+      ) : list.length === 0 ? (
+        <div className="space-y-4 py-10">
+          <p className="text-[15px] text-muted-foreground">
+            Nenhuma despesa recorrente. Aluguel, assinaturas e contas fixas entram aqui.
+          </p>
+          <Button onClick={openCreateModal} className="gap-2">
+            <Plus aria-hidden />
+            criar a primeira
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-8 border-t-2 border-foreground">
+          {list.map((item) => {
+            const soon = isSoon(item);
+            const meta = [
+              nextWord(item.nextExecutionDate, todayStr),
+              PAYMENT_LABEL[item.paymentSourceType] ?? item.paymentSourceType,
+              item.categoryName,
+              ...item.tags.map((t) => `#${t.name}`),
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <LedgerRow
+                key={item.id}
+                tile={<DayTile day={dayOfMonth(item.nextExecutionDate)} tone={soon ? "open" : "forecast"} />}
+                title={item.title}
+                meta={<span className={daysFromToday(item.nextExecutionDate, todayStr) <= 0 ? "text-ink-open" : undefined}>{meta}</span>}
+                amount={formatAmount(item.amount, "−")}
+                onOpen={() => openEdit(item)}
+                openLabel={`Editar ${item.title}`}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      <Modal open={openCreate} onClose={closeForm} title="nova recorrente" size="lg">
+        <form onSubmit={onSubmit} className="space-y-4">
+          {formFields("recurring")}
+          <FormActions>
+            <Button type="button" variant="outline" onClick={closeForm}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={createRecurring.isPending}>
+              {createRecurring.isPending ? "Salvando…" : "Salvar"}
+            </Button>
+          </FormActions>
+        </form>
+      </Modal>
+
+      <Modal open={!!editingItem} onClose={closeForm} title="editar recorrente" size="lg">
+        <form onSubmit={onEditSubmit} className="space-y-4">
+          {formFields("edit-recurring")}
+          <FormActions
+            aside={
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-ink-out hover:text-ink-out sm:w-auto"
+                onClick={() => editingItem && setDeletingItem(editingItem)}
+              >
+                excluir
+              </Button>
+            }
+          >
+            <Button type="button" variant="outline" onClick={closeForm}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={updateRecurring.isPending}>
+              {updateRecurring.isPending ? "Salvando…" : "Salvar"}
+            </Button>
+          </FormActions>
+        </form>
+      </Modal>
+
+      <Modal open={!!deletingItem} onClose={() => setDeletingItem(null)} title="excluir recorrente?" size="sm">
+        <div className="space-y-4">
+          {deletingItem ? (
+            <p className="text-[15px] text-muted-foreground">
+              <span className="font-medium text-foreground">{deletingItem.title}</span> ({formatCurrency(deletingItem.amount)})
+              para de ser lançada. As compras já lançadas continuam.
+            </p>
+          ) : null}
+          <FormActions>
+            <Button type="button" variant="outline" onClick={() => setDeletingItem(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="destructive" onClick={onConfirmDelete} disabled={deleteRecurring.isPending}>
+              {deleteRecurring.isPending ? "Excluindo…" : "Excluir"}
+            </Button>
+          </FormActions>
+        </div>
+      </Modal>
     </div>
   );
 }

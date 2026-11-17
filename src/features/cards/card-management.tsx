@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Landmark, Pencil } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -8,15 +8,16 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { useCards, useCreateCard, useCurrentUser, useUpdateCard } from "@/shared/hooks/use-app-data";
-import { formatCurrency } from "@/shared/utils/formatters";
 import { CardStatementFundingModal } from "@/features/cards/card-statement-funding-modal";
-import { Badge } from "@/shared/ui/badge";
+import { AnswerFigure, LedgerSkeleton } from "@/features/month/ledger";
+import { formatAmount } from "@/features/month/month-model";
+import { PlaneBar, PlaneLegend } from "@/features/month/plane-bar";
+import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
-import { PageHeader } from "@/shared/ui/page-header";
+import { Field, FormActions, PageHeader } from "@/shared/ui/page-header";
 
 const schema = z.object({
   name: z.string().min(1),
@@ -88,63 +89,156 @@ export function CardManagement() {
 
   const list = cards.data ?? [];
   const isLoading = cards.isLoading;
+  const totalLimit = list.reduce((s, c) => s + c.creditLimit, 0);
+  const totalUsed = list.reduce((s, c) => s + c.usedLimit, 0);
+  const totalFree = totalLimit - totalUsed;
+
+  const fields = (f: typeof form, prefix: string) => (
+    <>
+      <Field label="Nome do cartão" htmlFor={`${prefix}-name`}>
+        <Input id={`${prefix}-name`} placeholder="Ex: Nubank" {...f.register("name")} />
+      </Field>
+      <Field label="Limite" htmlFor={`${prefix}-limit`}>
+        <CurrencyInput
+          id={`${prefix}-limit`}
+          value={f.watch("creditLimit") ?? 0}
+          onChange={(v) => f.setValue("creditLimit", v)}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Fecha no dia" htmlFor={`${prefix}-closing`}>
+          <Input
+            id={`${prefix}-closing`}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={31}
+            {...f.register("closingDay", { valueAsNumber: true })}
+          />
+        </Field>
+        <Field label="Vence no dia" htmlFor={`${prefix}-due`}>
+          <Input
+            id={`${prefix}-due`}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={31}
+            {...f.register("dueDay", { valueAsNumber: true })}
+          />
+        </Field>
+      </div>
+      <p className="text-[15px] text-muted-foreground">Compras no dia do fechamento em diante vão para a fatura seguinte.</p>
+    </>
+  );
 
   return (
-    <div className="space-y-8">
+    <div className="pb-4">
       <PageHeader
-        title="Cartões"
-        description="Gerencie seus cartões de crédito e acompanhe o uso do limite."
+        title="cartões"
         actions={
-          <Button className="w-full sm:w-auto" onClick={() => setOpenCreate(true)}>
-            Adicionar cartão
+          <Button size="sm" className="gap-1.5" onClick={() => setOpenCreate(true)}>
+            <Plus aria-hidden />
+            novo
           </Button>
         }
       />
 
-      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Adicionar cartão" size="md">
+      {list.length > 0 || isLoading ? (
+        <section aria-label="Resumo dos cartões" className="pt-6">
+          <AnswerFigure
+            label={totalFree < 0 ? "passou do limite dos cartões" : "livre nos cartões"}
+            value={formatAmount(totalFree)}
+            negative={totalFree < 0}
+            loading={isLoading}
+            meta={`usado ${formatAmount(totalUsed)} de ${formatAmount(totalLimit)}`}
+          />
+        </section>
+      ) : null}
+
+      {isLoading ? (
+        <LedgerSkeleton rows={3} />
+      ) : cards.isError ? (
+        <p className="py-10 text-[15px] text-ink-out">Não foi possível carregar os cartões. Recarregue a página.</p>
+      ) : list.length === 0 ? (
+        <div className="space-y-4 py-10">
+          <p className="text-[15px] text-muted-foreground">Nenhum cartão ainda.</p>
+          <Button onClick={() => setOpenCreate(true)} className="gap-2">
+            <Plus aria-hidden />
+            adicionar o primeiro cartão
+          </Button>
+        </div>
+      ) : (
+        <div className="md:grid md:grid-cols-2 md:gap-x-10">
+          {list.map((card) => {
+            const used = Math.max(0, card.usedLimit);
+            const over = used - card.creditLimit;
+            const free = card.creditLimit - used;
+            const percent = card.creditLimit > 0 ? Math.round((used / card.creditLimit) * 100) : 0;
+            return (
+              <section key={card.id} className="pt-8" aria-labelledby={`card-${card.id}`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 id={`card-${card.id}`} className="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight">
+                    {card.name}
+                  </h2>
+                  <span className={cn("shrink-0 text-[15px] font-medium tabular-nums text-foreground")}>
+                    {percent}%
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[15px] text-muted-foreground">
+                  fecha dia {card.closingDay} · vence dia {card.dueDay}
+                </p>
+                <PlaneBar
+                  className="mt-3"
+                  label={`${card.name}: usado ${formatAmount(used)} de ${formatAmount(card.creditLimit)}`}
+                  segments={[
+                    { key: "used", value: Math.min(used, card.creditLimit), tone: "out" },
+                    over > 0
+                      ? { key: "over", value: over, tone: "deficit" }
+                      : { key: "free", value: free, tone: "in" },
+                  ]}
+                />
+                <PlaneLegend
+                  className="mt-3"
+                  items={[
+                    { key: "used", label: "usado", tone: "out", amount: formatAmount(used) },
+                    over > 0
+                      ? { key: "over", label: "excedido", tone: "deficit", amount: formatAmount(over) }
+                      : { key: "free", label: "livre", tone: "in", amount: formatAmount(free) },
+                  ]}
+                />
+                <div className="mt-2 flex gap-2 border-t border-border pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFundingCard(card);
+                      setFundingEpoch((e) => e + 1);
+                    }}
+                  >
+                    pagar fatura
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(card)}>
+                    editar
+                  </Button>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="novo cartão" size="md">
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="card-name">Nome do cartão</Label>
-            <Input id="card-name" placeholder="Ex: Nubank" {...form.register("name")} />
-          </div>
-            <div>
-              <Label htmlFor="card-limit">Limite de crédito</Label>
-              <CurrencyInput
-                id="card-limit"
-                value={form.watch("creditLimit") ?? 0}
-                onChange={(v) => form.setValue("creditLimit", v)}
-              />
-            </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="card-closing">Dia do fechamento</Label>
-              <Input
-                id="card-closing"
-                type="number"
-                min={1}
-                max={31}
-                {...form.register("closingDay", { valueAsNumber: true })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="card-due">Dia do vencimento</Label>
-              <Input
-                id="card-due"
-                type="number"
-                min={1}
-                max={31}
-                {...form.register("dueDay", { valueAsNumber: true })}
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
+          {fields(form, "card")}
+          <FormActions>
             <Button type="button" variant="outline" onClick={() => setOpenCreate(false)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={createCard.isPending}>
-              {createCard.isPending ? "Salvando..." : "Salvar cartão"}
+              {createCard.isPending ? "Salvando…" : "Salvar cartão"}
             </Button>
-          </div>
+          </FormActions>
         </form>
       </Modal>
 
@@ -155,153 +249,19 @@ export function CardManagement() {
         onClose={() => setFundingCard(null)}
       />
 
-      <Modal
-        open={!!editingCard}
-        onClose={() => setEditingCard(null)}
-        title="Editar cartão"
-        size="md"
-      >
+      <Modal open={!!editingCard} onClose={() => setEditingCard(null)} title="editar cartão" size="md">
         <form onSubmit={onEditCard} className="space-y-4">
-          <div>
-            <Label htmlFor="edit-card-name">Nome do cartão</Label>
-            <Input
-              id="edit-card-name"
-              placeholder="Ex: Nubank"
-              {...editForm.register("name")}
-            />
-          </div>
-          <div>
-            <Label htmlFor="edit-card-limit">Limite de crédito</Label>
-            <CurrencyInput
-              id="edit-card-limit"
-              value={editForm.watch("creditLimit") ?? 0}
-              onChange={(v) => editForm.setValue("creditLimit", v)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="edit-card-closing">Dia do fechamento</Label>
-              <Input
-                id="edit-card-closing"
-                type="number"
-                min={1}
-                max={31}
-                {...editForm.register("closingDay", { valueAsNumber: true })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-card-due">Dia do vencimento</Label>
-              <Input
-                id="edit-card-due"
-                type="number"
-                min={1}
-                max={31}
-                {...editForm.register("dueDay", { valueAsNumber: true })}
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
+          {fields(editForm, "edit-card")}
+          <FormActions>
             <Button type="button" variant="outline" onClick={() => setEditingCard(null)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={updateCard.isPending}>
-              {updateCard.isPending ? "Salvando..." : "Salvar"}
+              {updateCard.isPending ? "Salvando…" : "Salvar"}
             </Button>
-          </div>
+          </FormActions>
         </form>
       </Modal>
-
-      {isLoading ? (
-        <div className="rounded-xl border border-border bg-card px-6 py-12 text-center text-sm text-muted-foreground">
-          Carregando cartões...
-        </div>
-      ) : list.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
-          <CreditCard className="mx-auto h-12 w-12 text-muted-foreground/50" />
-          <p className="mt-4 text-sm font-medium text-foreground">Nenhum cartão cadastrado</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Adicione seu primeiro cartão para acompanhar o limite e as faturas.
-          </p>
-          <Button className="mt-6 w-full max-w-xs sm:w-auto" onClick={() => setOpenCreate(true)}>
-            Adicionar cartão
-          </Button>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map((card) => {
-            const usageRatio = card.creditLimit === 0 ? 0 : card.usedLimit / card.creditLimit;
-            const usagePercent = Math.round(usageRatio * 100);
-            const isHighUsage = usageRatio >= 0.8;
-            return (
-              <article
-                key={card.id}
-                className="rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <CreditCard className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-foreground">{card.name}</h3>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Fechamento dia {card.closingDay} · Vencimento dia {card.dueDay}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => {
-                        setFundingCard(card);
-                        setFundingEpoch((e) => e + 1);
-                      }}
-                      aria-label="Planejar pagamento da fatura"
-                      title="De onde pagar a fatura (por mês)"
-                    >
-                      <Landmark className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => openEdit(card)}
-                      aria-label="Editar cartão"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    {isHighUsage && (
-                      <Badge variant="secondary">
-                        Limite alto
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Usado</span>
-                    <span className="font-medium tabular-nums text-foreground">
-                      {formatCurrency(card.usedLimit)} / {formatCurrency(card.creditLimit)}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        isHighUsage ? "bg-destructive" : "bg-primary"
-                      }`}
-                      style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

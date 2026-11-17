@@ -398,9 +398,9 @@ export function VoiceCommandFab() {
       </Button>
 
       <Dialog open={recordOpen} onOpenChange={closeRecorder}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Comando por voz</DialogTitle>
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md">
+          <DialogHeader className="text-left">
+            <DialogTitle className="pr-8">comando por voz</DialogTitle>
             <DialogDescription>
               Exemplos: “criar caixinha Viagem”, “atualizar caixinha Carro para 1000”, “depósito de
               500”, “despesa mercado 80 reais”.
@@ -416,7 +416,7 @@ export function VoiceCommandFab() {
             )}
             {voiceState === "listening" && (
               <div className="flex flex-col gap-3">
-                <p className="text-center text-sm text-muted-foreground">Ouvindo… (máx. 30s)</p>
+                <p className="text-center text-[15px] text-muted-foreground">Ouvindo… (máx. 30s)</p>
                 <div className="flex gap-2">
                   <Button
                     type="button"
@@ -437,7 +437,7 @@ export function VoiceCommandFab() {
               </div>
             )}
             {voiceState === "parsing" && (
-              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <div className="flex items-center justify-center gap-2 py-6 text-[15px] text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Interpretando…
               </div>
@@ -447,8 +447,8 @@ export function VoiceCommandFab() {
       </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={closeConfirm}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md">
+          <DialogHeader className="text-left">
             <DialogTitle>
               {pendingCommand ? voiceCommandTitle(pendingCommand) : "Confirmar"}
             </DialogTitle>
@@ -457,7 +457,7 @@ export function VoiceCommandFab() {
 
           {pendingCommand?.intent === "create_purchase" &&
             (pendingCommand.purchase.amount == null || pendingCommand.purchase.amount <= 0) && (
-              <p className="text-sm text-destructive">
+              <p className="text-[15px] text-ink-out">
                 Valor da despesa não foi entendido. Cancele e fale de novo, ou cadastre pela tela de
                 Compras.
               </p>
@@ -466,7 +466,7 @@ export function VoiceCommandFab() {
           {pendingCommand?.intent === "set_pocket_balance" &&
             Math.abs(pendingCommand.balanceDelta) <= 1e-6 &&
             pendingCommand.newDescription == null && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[15px] text-muted-foreground">
                 Nada a alterar — diga um novo saldo e/ou uma nova descrição.
               </p>
             )}

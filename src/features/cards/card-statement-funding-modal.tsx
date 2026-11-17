@@ -10,11 +10,14 @@ import {
   useReplaceCardStatementFunding,
 } from "@/shared/hooks/use-app-data";
 import { DEPOSIT_SUM_EPS } from "@/shared/lib/deposit-split";
-import { formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
+import { MonthSwitcher } from "@/features/month/ledger";
+import { formatAmount, monthLabel } from "@/features/month/month-model";
+import { PlaneBar, PlaneLegend } from "@/features/month/plane-bar";
+import { cn } from "@/shared/lib/cn";
+import { formatDisplayDate } from "@/shared/utils/formatters";
 import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { FormActions } from "@/shared/ui/page-header";
 import { SelectOptions } from "@/shared/ui/select-options";
 
 export type CardStatementFundingTarget = {
@@ -207,189 +210,148 @@ export function CardStatementFundingModal({
 
   if (!card) return null;
 
-  return (
-    <Modal open={open} onClose={onClose} title={`Pagamento da fatura — ${card.name}`} size="3xl">
-      <div className="min-w-0 space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Para cada mês de referência da fatura, escolha de onde sairá o dinheiro para pagar cada compra (conta
-          corrente ou caixinha). Pode haver um plano diferente por mês; cada cartão tem seus próprios planos.
-        </p>
-        <div>
-          <Label htmlFor="stmt-month">Mês da fatura (referência)</Label>
-          <Input
-            id="stmt-month"
-            type="month"
-            value={statementMonth}
-            onChange={(e) => setStatementMonth(e.target.value)}
-            className="mt-1.5 max-w-xs"
-          />
-        </div>
+  const validMonth = STATEMENT_MONTH_RE.test(statementMonth.trim());
+  const hasPlan = Boolean(fundingPlans?.some((m) => m.statementMonth === statementMonth));
+  const summaryTotal = sourceSummary.reduce((s, r) => s + r.amount, 0);
 
-        <div className="rounded-lg border border-border bg-muted/35 px-3 py-2.5">
-          <p className="text-xs font-medium text-muted-foreground">
-            Total a pagar na fatura ({formatYearMonthLabel(statementMonth)})
-          </p>
-          {invoiceTotalLoading ? (
-            <p className="mt-1 text-sm text-muted-foreground">Calculando…</p>
-          ) : invoiceTotalError ? (
-            <p className="mt-1 text-sm text-destructive">
-              Não foi possível calcular o total da fatura. Tente novamente.
-            </p>
-          ) : invoiceTotal === null ? (
-            <>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums text-muted-foreground">—</p>
-              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                {STATEMENT_MONTH_RE.test(statementMonth.trim())
-                  ? "Não foi possível obter o total desta fatura. Recarregue a página ou tente novamente."
-                  : "Informe o mês de referência da fatura (formato AAAA-MM)."}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
-                {formatCurrency(invoiceTotal)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                {invoiceTotal <= DEPOSIT_SUM_EPS
-                  ? "Nenhuma compra lançada para este mês de fatura neste cartão."
-                  : useInvoiceFromList
-                    ? "Mesmo valor do subtotal do grupo deste cartão na lista de movimentos."
-                    : "Soma das compras registradas no app para este mês de referência (cada parcela conta no mês da data da parcela)."}
-              </p>
-            </>
-          )}
+  return (
+    <Modal open={open} onClose={onClose} title={
+        <>
+          pagar fatura · <span className="normal-case">{card.name}</span>
+        </>
+      } size="2xl">
+      <div className="min-w-0 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[15px] text-muted-foreground">De onde sai o dinheiro de cada compra.</p>
+          <MonthSwitcher month={statementMonth} onChange={setStatementMonth} />
         </div>
 
         {fundingPlans && fundingPlans.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Meses já planejados:</span>
+            <span className="mr-1 text-[15px] text-muted-foreground">já planejado</span>
             {fundingPlans.map((m) => (
               <Button
                 key={m.statementMonth}
                 type="button"
-                variant={statementMonth === m.statementMonth ? "default" : "outline"}
                 size="sm"
-                className="h-7 text-xs"
+                variant={statementMonth === m.statementMonth ? "default" : "outline"}
                 onClick={() => setStatementMonth(m.statementMonth)}
+                aria-pressed={statementMonth === m.statementMonth}
               >
-                {formatYearMonthLabel(m.statementMonth)}
+                {monthLabel(m.statementMonth)}
               </Button>
             ))}
           </div>
         ) : null}
 
-        <div className="space-y-3">
-          <Label>Fonte por compra</Label>
+        <div>
+          <div className="flex items-baseline justify-between gap-3 border-b-2 border-foreground pb-1.5">
+            <span className="text-[15px] font-bold lowercase text-foreground">fatura de {monthLabel(statementMonth)}</span>
+            <span className="text-2xl font-bold tabular-nums text-foreground">
+              {invoiceTotalLoading ? "…" : invoiceTotal == null || invoiceTotalError ? "—" : formatAmount(invoiceTotal, "−")}
+            </span>
+          </div>
+          {invoiceTotalError ? (
+            <p className="pt-2 text-[15px] text-ink-out">Não foi possível calcular o total. Tente de novo.</p>
+          ) : null}
 
-          {!STATEMENT_MONTH_RE.test(statementMonth.trim()) ? (
-            <p className="text-sm text-muted-foreground">Informe o mês da fatura para listar as compras.</p>
+          {sourceSummary.length > 0 && summaryTotal > DEPOSIT_SUM_EPS ? (
+            <div className="pt-3">
+              <PlaneBar
+                label={`Fontes: ${sourceSummary.map((r) => `${r.label} ${formatAmount(r.amount)}`).join(", ")}`}
+                segments={sourceSummary.map((r) => ({ key: r.label, value: r.amount, tone: "out" as const }))}
+              />
+              <PlaneLegend
+                className="mt-3"
+                items={sourceSummary.map((r) => ({
+                  key: r.label,
+                  label: `${r.label} ${Math.round((r.amount / summaryTotal) * 100)}%`,
+                  tone: "out" as const,
+                  amount: formatAmount(r.amount),
+                }))}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        <div>
+          {!validMonth ? (
+            <p className="py-4 text-[15px] text-muted-foreground">Escolha o mês da fatura.</p>
           ) : funding.isFetching && invoiceLines === null ? (
-            <p className="text-sm text-muted-foreground">Carregando compras…</p>
+            <p className="py-4 text-[15px] text-muted-foreground">Carregando compras…</p>
           ) : funding.isError && invoiceLines === null ? (
-            <p className="text-sm text-destructive">Não foi possível carregar a lista de compras.</p>
+            <p className="py-4 text-[15px] text-ink-out">Não foi possível carregar as compras.</p>
           ) : invoiceLines && invoiceLines.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma compra neste mês de fatura.</p>
+            <p className="py-4 text-[15px] text-muted-foreground">Nenhuma compra nesta fatura.</p>
           ) : invoiceLines && invoiceLines.length > 0 ? (
-            <div className="max-h-[min(24rem,50dvh)] space-y-2 overflow-y-auto pr-0.5">
+            <ul className="max-h-[min(26rem,50dvh)] overflow-y-auto">
               {invoiceLines.map((line) => {
                 const inst = installmentShortLabel(line.installmentNumber, line.installmentCount);
                 const assignment = assignments[line.id] ?? { targetType: "account" as const, pocketId: "" };
                 return (
-                  <div
-                    key={line.id}
-                    className="min-w-0 rounded-lg border border-border/80 bg-muted/20 p-3"
-                  >
+                  <li key={line.id} className="border-t border-border py-3 first:border-t-0">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="wrap-break-word font-medium leading-snug text-foreground">{line.title}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="truncate text-[15px] font-medium text-foreground">{line.title}</p>
+                        <p className="text-[15px] text-muted-foreground">
                           {formatDisplayDate(line.purchaseDate)}
-                          {inst ? ` · ${inst} parcelas` : null}
+                          {inst ? ` · ${inst}` : null}
                         </p>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
-                        {formatCurrency(line.amount)}
+                      <span className="shrink-0 text-[15px] font-medium tabular-nums text-foreground">
+                        {formatAmount(line.amount, "−")}
                       </span>
                     </div>
-                    <div
-                      className={`mt-3 grid grid-cols-1 gap-3 ${assignment.targetType === "pocket" ? "sm:grid-cols-2" : ""}`}
-                    >
-                      <div className="min-w-0">
-                        <Label className="text-xs">Pagar com</Label>
-                        <SelectOptions
-                          className="w-full min-w-0"
-                          value={assignment.targetType}
-                          onValueChange={(v) =>
-                            updateAssignment(line.id, { targetType: v as "account" | "pocket" })
-                          }
-                          options={[
-                            { value: "account", label: "Conta corrente" },
-                            { value: "pocket", label: "Caixinha" },
-                          ]}
-                        />
-                      </div>
+                    <div className={cn("mt-2 grid grid-cols-1 gap-2", assignment.targetType === "pocket" && "grid-cols-2")}>
+                      <SelectOptions
+                        aria-label={`Pagar ${line.title} com`}
+                        className="w-full min-w-0"
+                        value={assignment.targetType}
+                        onValueChange={(v) => updateAssignment(line.id, { targetType: v as "account" | "pocket" })}
+                        options={[
+                          { value: "account", label: "Conta corrente" },
+                          { value: "pocket", label: "Caixinha" },
+                        ]}
+                      />
                       {assignment.targetType === "pocket" ? (
-                        <div className="min-w-0">
-                          <Label className="text-xs">Caixinha</Label>
-                          <SelectOptions
-                            className="w-full min-w-0"
-                            value={assignment.pocketId}
-                            onValueChange={(v) => updateAssignment(line.id, { pocketId: v })}
-                            options={pocketOptions}
-                          />
-                        </div>
+                        <SelectOptions
+                          aria-label={`Caixinha para ${line.title}`}
+                          className="w-full min-w-0"
+                          value={assignment.pocketId}
+                          onValueChange={(v) => updateAssignment(line.id, { pocketId: v })}
+                          options={[{ value: "", label: "Qual caixinha?" }, ...pocketOptions]}
+                        />
                       ) : null}
                     </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
-          ) : null}
-
-          {sourceSummary.length > 0 && invoiceTotal != null && invoiceTotal > DEPOSIT_SUM_EPS ? (
-            <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2.5">
-              <p className="text-xs font-medium text-muted-foreground">Resumo por fonte</p>
-              <ul className="mt-1.5 space-y-1 text-sm">
-                {sourceSummary.map((row) => (
-                  <li key={row.label} className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="text-foreground">{row.label}</span>
-                    <span className="tabular-nums font-medium text-foreground">
-                      {formatCurrency(row.amount)}
-                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                        ({((row.amount / invoiceTotal) * 100).toFixed(0)}%)
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            </ul>
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-auto min-h-9 w-full justify-center px-2 text-destructive hover:text-destructive sm:w-auto sm:justify-start"
-            onClick={() => void removePlan()}
-            disabled={replaceFunding.isPending || !fundingPlans?.some((m) => m.statementMonth === statementMonth)}
-          >
-            Remover plano deste mês
+        <FormActions
+          aside={
+            hasPlan ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-ink-out hover:text-ink-out sm:w-auto"
+                onClick={() => void removePlan()}
+                disabled={replaceFunding.isPending}
+              >
+                remover plano deste mês
+              </Button>
+            ) : null
+          }
+        >
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
           </Button>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              onClick={() => void save()}
-              disabled={replaceFunding.isPending || !hasPurchases}
-            >
-              {replaceFunding.isPending ? "Salvando..." : "Salvar"}
-            </Button>
-          </div>
-        </div>
+          <Button type="button" onClick={() => void save()} disabled={replaceFunding.isPending || !hasPurchases}>
+            {replaceFunding.isPending ? "Salvando…" : "Salvar plano"}
+          </Button>
+        </FormActions>
       </div>
     </Modal>
   );

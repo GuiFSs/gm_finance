@@ -155,6 +155,77 @@ export function MonthSwitcher({
   );
 }
 
+/** O número que responde a tela: rótulo a lápis, valor em 48px, uma linha de apoio. */
+export function AnswerFigure({
+  label,
+  value,
+  negative,
+  meta,
+  loading,
+}: {
+  label: ReactNode;
+  value: string;
+  negative?: boolean;
+  meta?: ReactNode;
+  loading?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[15px] font-medium lowercase text-muted-foreground">{label}</p>
+      {loading ? (
+        <>
+          <p className="mt-1 h-12 w-44 animate-pulse bg-muted" aria-label="Carregando" />
+          {meta !== undefined ? <p className="mt-2 h-5 w-40 animate-pulse bg-muted" /> : null}
+        </>
+      ) : (
+        <>
+          <p className={cn("mt-1 text-[48px] font-bold leading-none tracking-[-0.03em] tabular-nums", negative && "text-ink-out")}>
+            <span className="mr-1.5 text-2xl font-medium tracking-normal">{negative ? "−R$" : "R$"}</span>
+            {value}
+          </p>
+          {meta ? <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">{meta}</p> : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Grupo com título de 24px, total à direita e a régua de 2px sobre as linhas. */
+export function LedgerGroup({
+  title,
+  aside,
+  meta,
+  children,
+  className,
+}: {
+  title: ReactNode;
+  aside?: ReactNode;
+  meta?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("pt-8", className)}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight text-foreground">{title}</h2>
+        {aside ? <span className="shrink-0 text-[15px] font-medium tabular-nums text-foreground">{aside}</span> : null}
+      </div>
+      {meta ? <p className="mt-0.5 text-[15px] text-muted-foreground">{meta}</p> : null}
+      <div className="mt-2 border-t-2 border-foreground">{children}</div>
+    </section>
+  );
+}
+
+export function LedgerSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 pt-6" aria-label="Carregando">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="h-12 animate-pulse bg-muted" />
+      ))}
+    </div>
+  );
+}
+
 export function SectionHeading({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 pb-1 pt-8">

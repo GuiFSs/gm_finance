@@ -24,7 +24,6 @@ import {
 } from "@/shared/hooks/use-app-data";
 import { fetcher } from "@/shared/lib/fetcher";
 import { formatCurrency, formatDisplayDate, parseLocalDateYmd, toInputDate } from "@/shared/utils/formatters";
-import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card, CardTitle } from "@/shared/ui/card";
 import { CurrencyInput } from "@/shared/ui/currency-input";
@@ -652,9 +651,9 @@ function PurchaseFormFields({
             />
           </div>
           {showCreateCategory ? (
-            <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/30 p-3 dark:bg-muted/20">
+            <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
               <div className="min-w-0 flex-1 space-y-1">
-                <Label htmlFor="new-category-name" className="text-xs text-muted-foreground">
+                <Label htmlFor="new-category-name">
                   Nova categoria
                 </Label>
                 <Input
@@ -724,9 +723,10 @@ function PurchaseFormFields({
       </FormSection>
 
       {(checkingWouldBeNegative || pocketWouldBeNegative) && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
-          <Badge variant="destructive">Esta compra deixará o saldo negativo</Badge>
-        </div>
+        <p className="flex items-center gap-2 text-[15px] font-medium text-ink-out" role="status">
+          <span className="size-2.5 shrink-0 bg-[repeating-linear-gradient(135deg,var(--plane-out)_0_2px,transparent_2px_5px)]" aria-hidden />
+          {checkingWouldBeNegative ? "A conta corrente fica negativa." : "A caixinha fica negativa."}
+        </p>
       )}
 
       <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
@@ -749,11 +749,9 @@ function PurchaseFormFields({
     return formContent;
   }
   return (
-    <div className="mx-auto max-w-2xl">
-      <Card className="p-6 sm:p-8">
-        <CardTitle className="mb-6">{purchaseId ? "Editar despesa" : "Nova compra"}</CardTitle>
-        {formContent}
-      </Card>
+    <div className="mx-auto max-w-2xl pb-4">
+      <h1 className="mb-6 text-2xl font-bold lowercase leading-none tracking-tight">{purchaseId ? "editar compra" : "nova compra"}</h1>
+      {formContent}
     </div>
   );
 }
@@ -791,18 +789,17 @@ export function PurchaseForm({ onSuccess, onCancel, purchaseId = null }: Purchas
 
   if (isEditLoading) {
     const spinner = (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="text-sm">Carregando despesa…</p>
+      <div className="space-y-3 py-4" aria-label="Carregando compra">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-12 animate-pulse bg-muted" />
+        ))}
       </div>
     );
     if (onSuccess) return spinner;
     return (
-      <div className="mx-auto max-w-2xl">
-        <Card className="p-6 sm:p-8">
-          <CardTitle className="mb-6">Editar despesa</CardTitle>
-          {spinner}
-        </Card>
+      <div className="mx-auto max-w-2xl pb-4">
+        <h1 className="mb-6 text-2xl font-bold lowercase leading-none tracking-tight">editar compra</h1>
+        {spinner}
       </div>
     );
   }

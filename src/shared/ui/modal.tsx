@@ -13,7 +13,7 @@ import { cn } from "@/shared/lib/cn";
 type ModalProps = {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   className?: string;
   /** max width: sm (max-w-sm), md (max-w-md), lg (max-w-lg), xl (max-w-xl), 2xl (max-w-2xl), 3xl (max-w-3xl) */
@@ -42,12 +42,12 @@ export function Modal({
       <DialogContent
         className={cn(
           sizeClasses[size],
-          "max-h-[90dvh] w-[calc(100%-1.5rem)] p-4 sm:w-full sm:p-6",
+          "max-h-[90dvh] w-[calc(100%-1.5rem)] p-5 sm:w-full sm:p-6",
           className
         )}
       >
         <DialogHeader>
-          <DialogTitle className="pr-6 text-left leading-snug">{title}</DialogTitle>
+          <DialogTitle className="pr-8 text-left">{title}</DialogTitle>
         </DialogHeader>
         <div className="max-h-[calc(100dvh-12rem)] overflow-x-hidden overflow-y-auto">
           {children}

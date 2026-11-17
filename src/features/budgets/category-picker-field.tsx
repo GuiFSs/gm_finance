@@ -9,6 +9,8 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SelectOptions } from "@/shared/ui/select-options";
 
+const CREATE = "__create__";
+
 type Props = {
   categories: Array<{ id: string; name: string }>;
   value: string;
@@ -24,10 +26,11 @@ export function CategoryPickerField({ categories, value, onChange, excludeIds = 
   const [newName, setNewName] = useState("");
 
   const options = [
-    { value: "", label: "Selecione..." },
+    { value: "", label: "Escolha a categoria" },
     ...categories
       .filter((c) => c.id === value || !excludeIds.includes(c.id))
       .map((c) => ({ value: c.id, label: c.name })),
+    { value: CREATE, label: "+ nova categoria" },
   ];
 
   const handleCreate = async () => {
@@ -49,12 +52,21 @@ export function CategoryPickerField({ categories, value, onChange, excludeIds = 
   };
 
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>Categoria</Label>
-      <SelectOptions id={id} value={value} onValueChange={onChange} options={options} />
+    <div className="space-y-1">
+      <Label htmlFor={id} className="sr-only">
+        Categoria
+      </Label>
+      <SelectOptions
+        id={id}
+        aria-label="Categoria"
+        value={value}
+        onValueChange={(v) => (v === CREATE ? setShowCreate(true) : onChange(v))}
+        options={options}
+      />
       {showCreate ? (
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 pt-1 sm:flex-row">
           <Input
+            aria-label="Nome da nova categoria"
             placeholder="Nome da categoria"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -82,11 +94,7 @@ export function CategoryPickerField({ categories, value, onChange, excludeIds = 
             </Button>
           </div>
         </div>
-      ) : (
-        <Button type="button" variant="link" className="h-auto px-0" onClick={() => setShowCreate(true)}>
-          + Nova categoria
-        </Button>
-      )}
+      ) : null}
     </div>
   );
 }

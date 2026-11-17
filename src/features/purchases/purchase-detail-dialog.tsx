@@ -1,13 +1,14 @@
 "use client";
 
-import { CreditCard, Landmark, Loader2, Pencil, PiggyBank, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { useDeletePurchase, usePurchaseDetail } from "@/shared/hooks/use-app-data";
-import { formatCalendarMonthLabel, formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
-import { Badge } from "@/shared/ui/badge";
+import { DayTile, LedgerRow, LedgerSkeleton } from "@/features/month/ledger";
+import { dayOfMonth, formatAmount } from "@/features/month/month-model";
+import { formatDisplayDate } from "@/shared/utils/formatters";
 import { Button } from "@/shared/ui/button";
 import {
   Dialog,
@@ -17,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/dialog";
+
+const SHORT_MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function shortMonth(yyyyMm: string): string {
+  const [year, month] = yyyyMm.split("-");
+  return `${SHORT_MONTHS[Number(month) - 1] ?? month}/${year?.slice(2)}`;
+}
 
 export function PurchaseDetailDialog({
   purchaseId,
@@ -60,170 +68,108 @@ export function PurchaseDetailDialog({
     }
   };
 
+  const source =
+    data?.paymentSourceType === "card"
+      ? `cartão ${data.cardName ?? ""}`.trim()
+      : data?.paymentSourceType === "pocket"
+        ? (data.pocketName ?? "caixinha")
+        : "conta corrente";
+  const isCard = data?.paymentSourceType === "card";
+
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] w-[calc(100vw-1rem)] max-w-2xl gap-0 overflow-y-auto p-0 sm:w-full">
-        <div className="border-b border-border px-4 py-4 sm:px-6 sm:py-5">
-          <DialogHeader className="space-y-1 text-left">
-            <DialogTitle>{title}</DialogTitle>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90dvh] w-[calc(100vw-1rem)] max-w-2xl gap-0 overflow-y-auto p-0 sm:w-full">
+          <DialogHeader className="space-y-0 px-5 pb-0 pt-5 text-left sm:px-6">
+            <DialogTitle className={data ? "pr-8 normal-case" : "pr-8"}>{data?.title ?? title}</DialogTitle>
+            <DialogDescription className="sr-only">Parcelas, datas e fonte de pagamento.</DialogDescription>
+          </DialogHeader>
+          <div className="px-5 pb-5 pt-4 sm:px-6">
+            {isLoading ? <LedgerSkeleton rows={3} /> : null}
+            {isError ? <p className="py-6 text-[15px] text-ink-out">Não foi possível carregar os detalhes.</p> : null}
+            {data ? (
+              <>
+                <p className="text-2xl font-bold tabular-nums text-foreground">{formatAmount(data.totalAmount, "−")}</p>
+                <p className="mt-1 text-[15px] text-muted-foreground">
+                  {[data.categoryName ?? "sem categoria", source, isCard && data.closingDay != null && data.dueDay != null
+                    ? `fecha dia ${data.closingDay} · vence dia ${data.dueDay}`
+                    : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {data.description ? <p className="mt-3 text-[15px] text-foreground">{data.description}</p> : null}
+
+                <h3 className="mt-6 border-b-2 border-foreground pb-1.5 text-[15px] font-bold lowercase text-foreground">
+                  {data.installments.length > 1 ? `${data.installments.length} parcelas` : "lançamento"}
+                </h3>
+                {isCard ? (
+                  <p className="pt-2 text-[15px] text-muted-foreground">Depois do fechamento, a compra vai para a fatura seguinte.</p>
+                ) : null}
+                <div>
+                  {data.installments.map((row) => (
+                    <div key={row.id} className={row.id === data.id ? "bg-accent/60" : undefined}>
+                      <LedgerRow
+                        tile={<DayTile day={dayOfMonth(row.purchaseDate)} tone="neutral" />}
+                        title={
+                          row.installmentCount > 1 ? `${row.installmentNumber}/${row.installmentCount}` : formatDisplayDate(row.purchaseDate)
+                        }
+                        meta={
+                          isCard
+                            ? [
+                                row.statementMonth ? `fatura ${shortMonth(row.statementMonth)}` : null,
+                                row.dueDate ? `vence ${formatDisplayDate(row.dueDate).slice(0, 5)}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || null
+                            : row.installmentCount > 1
+                              ? `debita ${formatDisplayDate(row.purchaseDate)}`
+                              : null
+                        }
+                        amount={formatAmount(row.amount, "−")}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <DialogFooter className="mt-4 flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-between sm:space-x-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="gap-2 text-ink-out hover:text-ink-out"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                  >
+                    <Trash2 aria-hidden />
+                    excluir
+                  </Button>
+                  <Button type="button" className="gap-2" onClick={handleEdit}>
+                    <Pencil aria-hidden />
+                    editar
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md">
+          <DialogHeader className="text-left">
+            <DialogTitle className="pr-8">excluir esta compra?</DialogTitle>
             <DialogDescription>
-              Parcelas, datas de pagamento e — no cartão — fatura e vencimento.
+              Todas as parcelas saem. O que foi debitado da conta ou da caixinha volta. Não dá para desfazer.
             </DialogDescription>
           </DialogHeader>
-        </div>
-        <div className="space-y-5 px-4 py-4 sm:px-6 sm:py-5">
-          {isLoading && (
-            <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Carregando...
-            </div>
-          )}
-          {isError && <p className="text-sm text-destructive">Não foi possível carregar os detalhes.</p>}
-          {data && (
-            <>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-lg font-semibold leading-snug text-foreground">{data.title}</p>
-                  {data.description ? (
-                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{data.description}</p>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {data.categoryName ? (
-                    <Badge variant="secondary">{data.categoryName}</Badge>
-                  ) : (
-                    <Badge variant="outline" className="font-normal text-muted-foreground">
-                      Sem categoria
-                    </Badge>
-                  )}
-                  {data.paymentSourceType === "card" && data.cardName ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
-                      <CreditCard className="h-3.5 w-3.5" />
-                      {data.cardName}
-                    </span>
-                  ) : null}
-                  {data.paymentSourceType === "account" ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
-                      <Landmark className="h-3.5 w-3.5" />
-                      Conta corrente
-                    </span>
-                  ) : null}
-                  {data.paymentSourceType === "pocket" && data.pocketName ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
-                      <PiggyBank className="h-3.5 w-3.5" />
-                      {data.pocketName}
-                    </span>
-                  ) : null}
-                  {data.paymentSourceType === "pocket" && !data.pocketName ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
-                      <PiggyBank className="h-3.5 w-3.5" />
-                      Caixinha
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {data.paymentSourceType === "card" && data.closingDay != null && data.dueDay != null ? (
-                <p className="rounded-lg border border-border bg-muted/30 px-3.5 py-3 text-sm leading-relaxed text-muted-foreground">
-                  Fechamento no dia <span className="font-medium text-foreground">{data.closingDay}</span> · vencimento
-                  no dia <span className="font-medium text-foreground">{data.dueDay}</span>. Compras a partir do dia do
-                  fechamento entram na próxima fatura.
-                </p>
-              ) : null}
-
-              {data.paymentSourceType !== "card" && data.installments && data.installments.length > 1 ? (
-                <p className="rounded-lg border border-border bg-muted/30 px-3.5 py-3 text-sm leading-relaxed text-muted-foreground">
-                  Cada parcela debita a conta ou caixinha na data indicada (um lançamento por mês).
-                </p>
-              ) : null}
-
-              <div>
-                <p className="mb-2.5 text-sm font-semibold text-foreground">{data.installments.length > 1 ? "Parcelas" : "Lançamento"}</p>
-                <div className="overflow-x-auto rounded-lg border border-border">
-                  <table className="w-full min-w-[520px] text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <th className="px-3 py-2.5">#</th>
-                        <th className="px-3 py-2.5">Valor</th>
-                        <th className="px-3 py-2.5">Data</th>
-                        {data.paymentSourceType === "card" ? (
-                          <>
-                            <th className="px-3 py-2.5">Fatura</th>
-                            <th className="px-3 py-2.5">Vencimento</th>
-                          </>
-                        ) : (
-                          <th className="px-3 py-2.5">Mês de referência</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {data.installments.map((row) => (
-                        <tr key={row.id} className={row.id === data.id ? "bg-primary/5" : undefined}>
-                          <td className="px-3 py-2.5 tabular-nums text-foreground">
-                            {row.installmentNumber}/{row.installmentCount}
-                          </td>
-                          <td className="px-3 py-2.5 font-medium tabular-nums text-foreground">{formatCurrency(row.amount)}</td>
-                          <td className="px-3 py-2.5 text-muted-foreground">{formatDisplayDate(row.purchaseDate)}</td>
-                          {data.paymentSourceType === "card" ? (
-                            <>
-                              <td className="px-3 py-2.5 text-muted-foreground">
-                                {row.statementMonth ? formatYearMonthLabel(row.statementMonth) : "—"}
-                              </td>
-                              <td className="px-3 py-2.5 text-muted-foreground">
-                                {row.dueDate ? formatDisplayDate(row.dueDate) : "—"}
-                              </td>
-                            </>
-                          ) : (
-                            <td className="px-3 py-2.5 text-muted-foreground">{formatCalendarMonthLabel(row.purchaseDate)}</td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <DialogFooter className="flex-col gap-2 border-t border-border px-0 pb-0 pt-4 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" className="gap-2" onClick={handleEdit}>
-                  <Pencil className="h-4 w-4" />
-                  Editar
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="gap-2"
-                  onClick={() => setConfirmDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Excluir
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Excluir esta despesa?</DialogTitle>
-          <DialogDescription>
-            Todas as parcelas deste lançamento serão removidas. Lançamentos em conta ou caixinha serão estornados do
-            histórico. Esta ação não pode ser desfeita.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="gap-2 sm:justify-end">
-          <Button type="button" variant="outline" onClick={() => setConfirmDeleteOpen(false)}>
-            Cancelar
-          </Button>
-          <Button type="button" variant="destructive" disabled={deletePurchase.isPending} onClick={handleDelete}>
-            {deletePurchase.isPending ? "Excluindo…" : "Excluir"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setConfirmDeleteOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="destructive" disabled={deletePurchase.isPending} onClick={handleDelete}>
+              {deletePurchase.isPending ? "Excluindo…" : "Excluir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

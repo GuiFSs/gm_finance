@@ -222,7 +222,7 @@ Square everywhere: every radius token is 0px, so cards, buttons, inputs, tiles, 
 
 ## Components
 
-Evidence scope: the Concreto components below ship on `/dashboard`, `/movements`, `/purchases`, the app shell and the purchase form. Other routes (orçamento, categorias, caixinhas, cartões, recorrentes, metas, depósitos, login) inherit the tokens and square corners but still use older patterns: 14px and 12px text, stock shadcn shadows and 18px semibold card/dialog titles. The stock shadcn primitives (button, input, select, toggle) also still default to 14px, and the purchase detail dialog keeps an uppercase tracked label. Treat those as drift to migrate, not as precedent.
+Evidence scope: the Concreto components below ship on every route: `/dashboard`, `/movements`, `/purchases`, `/budgets`, `/categories`, `/pockets`, `/cards`, `/recurring`, `/goals`, `/deposits`, `/login`, the app shell, the purchase form and every dialog. The shadcn primitives in `src/shared/ui` (button, input, label, select, dialog, sheet, popover, toggle, dropdown-menu, checkbox, accordion, badge, card) are restyled to 15px, square and shadowless, so a stock import already lands in this world.
 
 ### Buttons
 Flat ink slabs; the inverse of the ground.
@@ -231,6 +231,8 @@ Flat ink slabs; the inverse of the ground.
 - **Ghost:** transparent, ink text; hover fills with the hover slab. Used for the month switcher arrows (40px square) and "sair".
 - **Outline:** ground fill with a strong-rule border; hover fills with the hover slab.
 - **Focus:** 1px amarelo ring (`ring-1 ring-ring`) on every interactive element.
+- **Disabled primary:** drops the slab: transparent fill, 1px strong-rule border, pencil text. A disabled action never becomes the loudest shape on the screen.
+- **Sizes:** 40px default, 36px small, 40px square icon. Destructive actions in forms are ghost buttons in the red text ink ("excluir"), never a filled red slab outside the confirm dialog.
 
 ### Cards / Containers
 - **Corner Style:** square (0px).
@@ -240,9 +242,26 @@ Flat ink slabs; the inverse of the ground.
 - Redesigned surfaces mostly avoid cards and use rule-separated lists directly on the ground.
 
 ### Inputs / Fields
-- **Style:** transparent fill, 1px strong-rule border, square, 36px tall.
+- **Style:** transparent fill, 1px strong-rule border, square, 40px tall, 15px text; number inputs have no spinners. Sentence-case labels sit 6px above in 15px pencil; hints and errors sit below in 15px pencil or red text ink.
 - **Focus:** 1px amarelo ring; the caret is amarelo too.
 - **Disabled:** 50% opacity.
+
+### Dialogs and Forms
+Dialogs are a raised slab with a 1px strong-rule border, no shadow, square, with the close button as a 40px square in the top-right. The title is 24px bold lowercase, left-aligned; a proper name inside it (a card, a purchase) keeps its own casing. On phones a dialog spans the width minus 12px each side and scrolls its body. Forms end in one action row above a 1px rule: on phones cancel and save sit side by side in equal halves, with the destructive action centred below them; from 640px the destructive action moves to the left and cancel/save to the right. A destructive action only renders when there is something to remove. Delete lives inside the edit dialog, not as a row icon, except on categorias where the row has no other detail.
+
+### Answer Figure
+Every secondary route opens with one answer: a 15px/500 pencil label naming the question ("guardado nas caixinhas", "livre nos cartões", "falta guardar", "fixo por mês", "entrou em novembro", "livre no plano de setembro"), the 48px display amount with a 24px "R$" prefix, and a 15px pencil meta line. When the answer is a deficit the label says so ("passou do limite dos cartões", "passou da renda") and the figure moves to the red text ink, as on the dashboard. On desktop the figure and the route's plane sit side by side (2:3).
+
+### Route Planes
+Each route draws its money as one plane bar under the answer, with the same segment, gap and legend rules as the month plane bar:
+- **Caixinhas:** one azul segment per pocket, sized by balance; each row's tile is an azul square holding that pocket's share in percent (stripe for a negative balance). Tapping a segment opens the pocket.
+- **Cartões:** one bar per card: used (vermelho) plus livre (azul), or used plus a striped "excedido" segment for the amount over the limit.
+- **Metas:** one bar per goal: guardado (azul) plus falta (2px azul outline).
+- **Orçamento:** one vermelho-outlined segment per category with the spent share filled vermelho inside it (stripe when over), plus livre in azul; tapping a segment scrolls to its row. Each allocation and tag row repeats this as a 16px bar with a 1px outline, so an unspent plan reads hollow.
+- **Recorrentes:** one segment per item, ordered by day: amarelo when due within two days, vermelho outline after. Tapping opens the item.
+- **Depósitos:** the month's money split by destination in azul; the new/edit split editor previews the same plane live.
+- **Pagar fatura:** the statement split by source (conta or caixinha).
+A legend item whose value is zero is dropped, the same as a zero-width segment. A legend with one item takes one column.
 
 ### Navigation
 - **Sidebar (≥768px):** 15px lowercase items, 10px × 12px padding, 16px icon. Inactive in pencil with hover slab on hover; active is an inverted ink slab with ground text at 500.
@@ -250,7 +269,7 @@ Flat ink slabs; the inverse of the ground.
 - **"mais" sheet:** bottom sheet with the secondary routes in the sidebar style, plus "comando por voz" and an outline "sair".
 
 ### Segmented Toggle
-Square segments, 32px tall; the selected segment inverts to an ink slab with ground text ("por fonte" / "por data").
+Square segments, 32px tall; the selected segment inverts to an ink slab with ground text ("por fonte" / "por data", "avulsos" / "recorrentes"). In forms the toggle is 40px tall to match inputs ("R$" / "%"), and on login the two people are a pair of 56px segments.
 
 ### Month Plane Bar (signature)
 The month as one row of planes, 64px tall (48px compact), full width. Segment widths are proportional to value: pago (filled vermelho), em aberto (filled amarelo), previsto (2px vermelho outline, empty), sobra (filled azul). Segments are separated by 3px of ground and never narrower than 6px. In deficit the sobra segment drops out and a striped overlay (ground stripes over the bar, 2px ink left edge) covers the share of spending not covered, and the legend entry reads "falta" with a striped marker. With no data the bar is a dashed strong-rule rectangle. Width changes animate with `flex-grow` over 420ms on cubic-bezier(0.16, 1, 0.3, 1), only when reduced motion is not requested.

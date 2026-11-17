@@ -18,16 +18,22 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Plus, X } from "lucide-react";
 
 import type { BudgetAllocationMode, BudgetStatus } from "@/entities/budget/model";
 import { budgetStatus, resolveSiblingAmounts } from "@/shared/lib/budget-allocation";
-import { formatCurrency } from "@/shared/utils/formatters";
+import { formatAmount } from "@/features/month/month-model";
+import { PlaneBar } from "@/features/month/plane-bar";
 import { Button } from "@/shared/ui/button";
 import { CurrencyInput } from "@/shared/ui/currency-input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
-import { SelectOptions } from "@/shared/ui/select-options";
+import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
 import { cn } from "@/shared/lib/cn";
 
 import { CategoryPickerField } from "./category-picker-field";
@@ -72,13 +78,6 @@ function newNode(): DraftAllocationNode {
     children: [],
     expanded: true,
   };
-}
-
-function statusLabel(status?: BudgetStatus): string {
-  if (status === "over") return "Acima do plano";
-  if (status === "on_track") return "No limite";
-  if (status === "under") return "Dentro do plano";
-  return "";
 }
 
 type SortableRowProps = {
@@ -128,164 +127,174 @@ function SortableAllocationRow({
     showActuals &&
     ((isRootLevel && Boolean(node.categoryId)) || (!isRootLevel && Boolean(node.tagId)));
 
+  const spent = node.spentAmount ?? 0;
+  const status = budgetStatus(preview, spent);
+
   return (
     <li
       ref={setNodeRef}
+      id={`budget-row-${node.uid}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className={cn(
-        "rounded-md border border-border bg-background p-3",
-        isDragging && "z-10 opacity-80 shadow-md",
-      )}
+      className={cn("border-t border-border py-3 first:border-t-0", isDragging && "relative z-10 bg-card opacity-90")}
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="mt-6 h-8 w-8 shrink-0 cursor-grab touch-none active:cursor-grabbing"
-            aria-label="Arrastar para reordenar"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="mt-6 h-8 w-8 shrink-0"
-            onClick={() => onUpdate(node.uid, { expanded: !expanded })}
-            aria-label={expanded ? "Recolher" : "Expandir"}
-          >
-            {expanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </Button>
-          <div className="min-w-[160px] flex-1">
-            {isRootLevel ? (
-              <CategoryPickerField
-                categories={categories}
-                value={node.categoryId}
-                onChange={(categoryId) => onUpdate(node.uid, { categoryId })}
-                excludeIds={excludeCategories}
-              />
-            ) : (
-              <TagPickerField
-                tags={tags}
-                value={node.tagId}
-                onChange={(tagId) => onUpdate(node.uid, { tagId })}
-                excludeIds={excludeTags}
-              />
-            )}
-          </div>
-          <div className="w-[120px] space-y-1">
-            <Label>Tipo</Label>
-            <SelectOptions
-              value={node.allocationMode}
-              onValueChange={(v) => onSetMode(node.uid, v as BudgetAllocationMode)}
-              options={[
-                { value: "percent", label: "%" },
-                { value: "amount", label: "R$" },
-              ]}
+      <div className="flex items-start gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="-ml-2 shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+          aria-label="Arrastar para reordenar"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical />
+        </Button>
+        <div className="min-w-0 flex-1">
+          {isRootLevel ? (
+            <CategoryPickerField
+              categories={categories}
+              value={node.categoryId}
+              onChange={(categoryId) => onUpdate(node.uid, { categoryId })}
+              excludeIds={excludeCategories}
             />
-          </div>
-          {node.allocationMode === "percent" ? (
-            <div className="w-28 space-y-1">
-              <Label>%</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.01}
-                value={node.percent || ""}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  onUpdate(node.uid, {
-                    percent: Number.isFinite(n) ? n : 0,
-                    allocationMode: "percent",
-                  });
-                }}
-              />
-              <p className="text-xs text-muted-foreground">{formatCurrency(preview)}</p>
-            </div>
           ) : (
-            <div className="w-36 space-y-1">
-              <Label>Valor</Label>
-              <CurrencyInput
-                value={node.amount}
-                onChange={(amount) => onUpdate(node.uid, { amount, allocationMode: "amount" })}
-              />
-              {pool > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {((preview / pool) * 100).toFixed(1)}%
-                </p>
-              )}
-            </div>
+            <TagPickerField
+              tags={tags}
+              value={node.tagId}
+              onChange={(tagId) => onUpdate(node.uid, { tagId })}
+              excludeIds={excludeTags}
+            />
           )}
-          <div className="flex flex-wrap gap-1 pt-6">
-            <Button type="button" variant="outline" size="sm" onClick={() => onFillRemainder(node.uid)}>
-              Restante
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="-mr-2 shrink-0 text-muted-foreground hover:text-ink-out"
+          onClick={() => onRemove(node.uid)}
+          aria-label="Remover divisão"
+        >
+          <X />
+        </Button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 pl-8">
+        <ToggleGroup
+          type="single"
+          value={node.allocationMode}
+          onValueChange={(v) => v && onSetMode(node.uid, v as BudgetAllocationMode)}
+          aria-label="Dividir em"
+          className="gap-0 border border-input"
+        >
+          <ToggleGroupItem value="amount" className="h-10 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background">
+            R$
+          </ToggleGroupItem>
+          <ToggleGroupItem value="percent" className="h-10 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background">
+            %
+          </ToggleGroupItem>
+        </ToggleGroup>
+        {node.allocationMode === "percent" ? (
+          <Input
+            aria-label="Percentual"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={100}
+            step={0.01}
+            className="w-24"
+            value={node.percent || ""}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              onUpdate(node.uid, {
+                percent: Number.isFinite(n) ? n : 0,
+                allocationMode: "percent",
+              });
+            }}
+          />
+        ) : (
+          <CurrencyInput
+            aria-label="Valor"
+            className="w-36"
+            value={node.amount}
+            onChange={(amount) => onUpdate(node.uid, { amount, allocationMode: "amount" })}
+          />
+        )}
+        <span className="text-[15px] tabular-nums text-muted-foreground">
+          {node.allocationMode === "percent"
+            ? formatAmount(preview)
+            : pool > 0
+              ? `${((preview / pool) * 100).toFixed(1).replace(".", ",")}%`
+              : null}
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="icon" className="-mr-2 ml-auto text-muted-foreground" aria-label="Mais ações">
+              <MoreHorizontal />
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => onFillRemainder(node.uid)}>usar o restante</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
                 onUpdate(node.uid, {
                   children: [...node.children, newNode()],
                   expanded: true,
                 })
               }
             >
-              Dividir
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-destructive"
-              onClick={() => onRemove(node.uid)}
-              aria-label="Remover"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {showNodeActuals && (
-          <div
-            className={cn(
-              "rounded-md px-3 py-2 text-sm",
-              budgetStatus(preview, node.spentAmount ?? 0) === "over"
-                ? "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300"
-                : "bg-muted/50 text-muted-foreground",
-            )}
-          >
-            Planejado {formatCurrency(preview)} · Gasto {formatCurrency(node.spentAmount ?? 0)}
-            {` · ${statusLabel(budgetStatus(preview, node.spentAmount ?? 0))}`}
-          </div>
-        )}
-
-        {expanded && hasChildren && (
-          <BudgetAllocationRows
-            pool={preview}
-            nodes={node.children}
-            onChange={(children) => onUpdate(node.uid, { children })}
-            categories={categories}
-            tags={tags}
-            usedCategoryIds={usedCategoryIds}
-            usedTagIds={usedTagIds}
-            depth={depth + 1}
-            showActuals={showActuals}
-          />
-        )}
+              <Plus aria-hidden />
+              dividir em tags
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      {showNodeActuals ? (
+        <div className="mt-3 pl-8">
+          <PlaneBar
+            size="sm"
+            label={`Gasto ${formatAmount(spent)} de ${formatAmount(preview)}`}
+            segments={[{ key: "planned", value: Math.max(preview, spent), tone: "forecast", fill: preview > 0 ? spent / preview : spent > 0 ? 2 : 0 }]}
+          />
+          <p className={cn("mt-1.5 text-[15px] tabular-nums", status === "over" ? "text-ink-out" : "text-muted-foreground")}>
+            gasto {formatAmount(spent)}
+            {status === "over" ? ` · passou ${formatAmount(spent - preview)}` : null}
+          </p>
+        </div>
+      ) : null}
+
+      {hasChildren ? (
+        <div className="mt-1 pl-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-muted-foreground"
+            onClick={() => onUpdate(node.uid, { expanded: !expanded })}
+            aria-expanded={expanded}
+          >
+            {expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
+            {node.children.length} {node.children.length === 1 ? "tag" : "tags"}
+          </Button>
+        </div>
+      ) : null}
+
+      {expanded && hasChildren ? (
+        <BudgetAllocationRows
+          pool={preview}
+          nodes={node.children}
+          onChange={(children) => onUpdate(node.uid, { children })}
+          categories={categories}
+          tags={tags}
+          usedCategoryIds={usedCategoryIds}
+          usedTagIds={usedTagIds}
+          depth={depth + 1}
+          showActuals={showActuals}
+        />
+      ) : null}
     </li>
   );
 }
@@ -364,32 +373,16 @@ export function BudgetAllocationRows({
   };
 
   return (
-    <div className={cn("space-y-3", depth > 0 && "ml-3 border-l border-border pl-3 sm:ml-4 sm:pl-4")}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>Disponível: {formatCurrency(pool)}</span>
-          <span>·</span>
-          <span>Alocado: {formatCurrency(sumAllocated)}</span>
-          <span>·</span>
-          <span className={remaining < -0.02 ? "text-destructive" : ""}>
-            Restante: {formatCurrency(remaining)}
-          </span>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1"
-          onClick={() => onChange([...nodes, newNode()])}
-        >
-          <Plus className="h-4 w-4" />
-          Adicionar
-        </Button>
-      </div>
+    <div className={cn(depth > 0 && "ml-8 mt-2 border-l border-border pl-3")}>
+      {depth > 0 ? (
+        <p className={cn("pb-1 text-[15px] tabular-nums", remaining < -0.02 ? "text-ink-out" : "text-muted-foreground")}>
+          {remaining < -0.02
+            ? `passou ${formatAmount(-remaining)} de ${formatAmount(pool)}`
+            : `restam ${formatAmount(remaining)} de ${formatAmount(pool)}`}
+        </p>
+      ) : null}
 
-      {nodes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhuma divisão neste nível.</p>
-      ) : (
+      {nodes.length > 0 ? (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -398,7 +391,7 @@ export function BudgetAllocationRows({
           onDragEnd={onDragEnd}
         >
           <SortableContext items={nodes.map((n) => n.uid)} strategy={verticalListSortingStrategy}>
-            <ul className={cn("space-y-3", activeId && "select-none")}>
+            <ul className={cn(activeId && "select-none")}>
               {nodes.map((node, index) => {
                 const preview = previewAmounts[index] ?? 0;
                 const excludeCategories = usedCategoryIds.filter((id) => id !== node.categoryId);
@@ -429,7 +422,18 @@ export function BudgetAllocationRows({
             </ul>
           </SortableContext>
         </DndContext>
-      )}
+      ) : null}
+
+      <Button
+        type="button"
+        variant={isRootLevel ? "outline" : "ghost"}
+        size="sm"
+        className={cn("gap-1.5", isRootLevel ? "mt-3" : "-ml-3 text-muted-foreground")}
+        onClick={() => onChange([...nodes, newNode()])}
+      >
+        <Plus aria-hidden />
+        {isRootLevel ? "categoria" : "tag"}
+      </Button>
     </div>
   );
 }

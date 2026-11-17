@@ -8,16 +8,8 @@ import { z } from "zod";
 
 import { useLogin, useUsers } from "@/shared/hooks/use-app-data";
 import { Button } from "@/shared/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/shared/ui/card";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
-import { SelectOptions } from "@/shared/ui/select-options";
+import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
 
 const schema = z.object({
   userId: z.string().min(1),
@@ -38,57 +30,72 @@ export function LoginForm() {
     },
   });
   const selectedUserId = useWatch({ control: form.control, name: "userId" });
+  const pin = useWatch({ control: form.control, name: "pin" });
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       await login.mutateAsync(values);
       router.push("/dashboard");
-      toast.success("Bem-vindo ao G&M Finance");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível entrar");
     }
   });
 
   return (
-    <Card className="w-full max-w-[420px] shadow-lg">
-      <CardHeader className="pb-2 text-center sm:text-left">
-        <CardTitle className="text-xl tracking-tight">Entrar</CardTitle>
-        <CardDescription className="text-pretty">
-          Escolha o usuário e informe o PIN para acessar o painel.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-5" onSubmit={onSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="login-user">Usuário</Label>
-            <SelectOptions
-              id="login-user"
-              value={selectedUserId ?? ""}
-              onValueChange={(v) => form.setValue("userId", v)}
-              options={[
-                { value: "", label: "Selecione o usuário" },
-                ...(users.data ?? []).map((user) => ({
-                  value: user.id,
-                  label: user.name,
-                })),
-              ]}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="login-pin">PIN</Label>
-            <Input
-              id="login-pin"
-              type="password"
-              maxLength={8}
-              autoComplete="current-password"
-              {...form.register("pin")}
-            />
-          </div>
-          <Button className="mt-1 w-full" type="submit" disabled={login.isPending}>
-            {login.isPending ? "Entrando..." : "Entrar"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="w-full max-w-[360px]">
+      <h1 className="text-[48px] font-bold lowercase leading-none tracking-[-0.03em] text-foreground">g&amp;m</h1>
+      <p className="mt-2 text-[15px] lowercase text-muted-foreground">gestão da casa</p>
+
+      <form className="mt-10 space-y-6" onSubmit={onSubmit}>
+        <fieldset>
+          <legend className="pb-2 text-[15px] text-muted-foreground">quem é</legend>
+          {users.isLoading ? (
+            <div className="grid grid-cols-2 gap-[3px]">
+              <div className="h-14 animate-pulse bg-muted" />
+              <div className="h-14 animate-pulse bg-muted" />
+            </div>
+          ) : users.isError ? (
+            <p className="text-[15px] text-ink-out">Não foi possível carregar os usuários. Recarregue a página.</p>
+          ) : (
+            <ToggleGroup
+              type="single"
+              value={selectedUserId}
+              onValueChange={(v) => v && form.setValue("userId", v)}
+              aria-label="Usuário"
+              className="grid grid-cols-2 gap-[3px]"
+            >
+              {(users.data ?? []).map((user) => (
+                <ToggleGroupItem
+                  key={user.id}
+                  value={user.id}
+                  className="h-14 border border-input text-[15px] lowercase data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                >
+                  {user.name}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          )}
+        </fieldset>
+
+        <div className="space-y-2">
+          <label htmlFor="login-pin" className="block text-[15px] text-muted-foreground">
+            pin
+          </label>
+          <Input
+            id="login-pin"
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            autoComplete="current-password"
+            className="h-14 text-2xl tracking-[0.3em]"
+            {...form.register("pin")}
+          />
+        </div>
+
+        <Button className="h-12 w-full" type="submit" disabled={login.isPending || !selectedUserId || !pin}>
+          {login.isPending ? "Entrando…" : "Entrar"}
+        </Button>
+      </form>
+    </div>
   );
 }

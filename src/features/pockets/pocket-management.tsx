@@ -1,7 +1,7 @@
 "use client";
 
-import { Pencil } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeftRight, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
@@ -15,14 +15,16 @@ import {
   useTransferToPocket,
   useUpdatePocket,
 } from "@/shared/hooks/use-app-data";
+import { AnswerFigure, LedgerRow, LedgerSkeleton } from "@/features/month/ledger";
+import { formatAmount } from "@/features/month/month-model";
+import { PlaneBar } from "@/features/month/plane-bar";
 import { toInputDate, formatCurrency } from "@/shared/utils/formatters";
-import { Badge } from "@/shared/ui/badge";
+import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { CurrencyInput } from "@/shared/ui/currency-input";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { Field, FormActions, PageHeader } from "@/shared/ui/page-header";
 import { SelectOptions } from "@/shared/ui/select-options";
 
 const pocketSchema = z.object({
@@ -182,238 +184,263 @@ export function PocketManagement() {
     }
   });
 
+  const openTransfer_ = () => {
+    transferForm.reset({
+      fromType: "account",
+      fromPocketId: "",
+      toType: "pocket",
+      toPocketId: "",
+      amount: 0,
+      transferDate: toInputDate(new Date()),
+    });
+    setOpenTransfer(true);
+  };
+
+  const list = useMemo(() => [...(pockets.data ?? [])].sort((a, b) => b.balance - a.balance), [pockets.data]);
+  const total = list.reduce((s, p) => s + p.balance, 0);
+  const positiveTotal = list.reduce((s, p) => s + Math.max(0, p.balance), 0);
+  const pocketOptions = [
+    { value: "", label: "Selecione a caixinha" },
+    ...list.map((p) => ({ value: p.id, label: p.name })),
+  ];
+  const transferErrors = transferForm.formState.errors;
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <CardTitle className="text-lg sm:text-xl">Caixinhas</CardTitle>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:gap-3">
-            <Button className="w-full sm:w-auto" onClick={() => setOpenCreatePocket(true)}>
-              Nova caixinha
+    <div className="pb-4">
+      <PageHeader
+        title="caixinhas"
+        actions={
+          <>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={openTransfer_} disabled={list.length === 0}>
+              <ArrowLeftRight aria-hidden />
+              transferir
             </Button>
-            <Button
-              className="w-full sm:w-auto"
-              variant="outline"
-              onClick={() => {
-                transferForm.reset({
-                  fromType: "account",
-                  fromPocketId: "",
-                  toType: "pocket",
-                  toPocketId: "",
-                  amount: 0,
-                  transferDate: toInputDate(new Date()),
-                });
-                setOpenTransfer(true);
-              }}
-            >
-              Transferir
+            <Button size="sm" className="gap-1.5" onClick={() => setOpenCreatePocket(true)}>
+              <Plus aria-hidden />
+              nova
             </Button>
+          </>
+        }
+      />
+
+      <section aria-label="Resumo das caixinhas" className="pt-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-end md:gap-10">
+        <AnswerFigure
+          label="guardado nas caixinhas"
+          value={formatAmount(total)}
+          negative={total < 0}
+          loading={pockets.isLoading}
+          meta={`${list.length} ${list.length === 1 ? "caixinha" : "caixinhas"}`}
+        />
+        {pockets.isLoading ? (
+          <div className="mt-5 h-12 animate-pulse bg-muted md:mt-0" />
+        ) : (
+          <PlaneBar
+            className="mt-5 md:mt-0"
+            label={`Caixinhas: ${list.map((p) => `${p.name} ${formatAmount(p.balance)}`).join(", ")}`}
+            segments={list.map((p) => ({
+              key: p.id,
+              value: Math.max(0, p.balance),
+              tone: "in" as const,
+              onSelect: () => openEdit(p),
+            }))}
+          />
+        )}
+      </section>
+
+      {pockets.isLoading ? (
+        <LedgerSkeleton />
+      ) : pockets.isError ? (
+        <p className="py-10 text-[15px] text-ink-out">Não foi possível carregar as caixinhas. Recarregue a página.</p>
+      ) : list.length === 0 ? (
+        <div className="space-y-4 py-10">
+          <p className="text-[15px] text-muted-foreground">Nenhuma caixinha ainda.</p>
+          <Button onClick={() => setOpenCreatePocket(true)} className="gap-2">
+            <Plus aria-hidden />
+            criar a primeira caixinha
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-8 border-t-2 border-foreground">
+          {list.map((pocket) => {
+            const negative = pocket.balance < 0;
+            const share = positiveTotal > 0 && !negative ? Math.round((pocket.balance / positiveTotal) * 100) : 0;
+            return (
+              <LedgerRow
+                key={pocket.id}
+                tile={
+                  <span
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center text-[15px] font-bold leading-none tabular-nums",
+                      negative
+                        ? "bg-[repeating-linear-gradient(135deg,var(--plane-out)_0_2px,transparent_2px_6px)] text-foreground"
+                        : "bg-plane-in text-white",
+                    )}
+                    aria-hidden
+                  >
+                    {negative ? "−" : `${share}%`}
+                  </span>
+                }
+                title={pocket.name}
+                meta={
+                  negative ? (
+                    <span className="text-ink-out">saldo negativo</span>
+                  ) : (
+                    pocket.description || null
+                  )
+                }
+                amount={
+                  <span className={negative ? "text-ink-out" : undefined}>
+                    {formatAmount(pocket.balance, negative ? "−" : undefined)}
+                  </span>
+                }
+                onOpen={() => openEdit(pocket)}
+                openLabel={`Editar ${pocket.name}`}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      <Modal open={openCreatePocket} onClose={() => setOpenCreatePocket(false)} title="nova caixinha" size="md">
+        <form onSubmit={onCreatePocket} className="space-y-4">
+          <Field label="Nome" htmlFor="pocket-name">
+            <Input id="pocket-name" placeholder="Ex: Reserva de emergência" {...pocketForm.register("name")} />
+          </Field>
+          <Field label="Descrição (opcional)" htmlFor="pocket-desc">
+            <Input id="pocket-desc" placeholder="Ex: Para imprevistos" {...pocketForm.register("description")} />
+          </Field>
+          <Field label="Valor inicial" htmlFor="pocket-initial" hint="Não sai da conta corrente.">
+            <CurrencyInput
+              id="pocket-initial"
+              value={pocketForm.watch("initialAmount") ?? 0}
+              onChange={(v) => pocketForm.setValue("initialAmount", v)}
+            />
+          </Field>
+          <FormActions>
+            <Button type="button" variant="outline" onClick={() => setOpenCreatePocket(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={createPocket.isPending}>
+              {createPocket.isPending ? "Criando…" : "Criar caixinha"}
+            </Button>
+          </FormActions>
+        </form>
+      </Modal>
+
+      <Modal open={!!editingPocket} onClose={() => setEditingPocket(null)} title="editar caixinha" size="md">
+        <form onSubmit={onEditPocket} className="space-y-4">
+          <Field label="Nome" htmlFor="edit-name">
+            <Input id="edit-name" placeholder="Ex: Reserva de emergência" {...editForm.register("name")} />
+          </Field>
+          <Field label="Descrição (opcional)" htmlFor="edit-desc">
+            <Input id="edit-desc" placeholder="Ex: Para imprevistos" {...editForm.register("description")} />
+          </Field>
+          <Field
+            label="Saldo"
+            htmlFor="edit-balance"
+            hint={
+              editingPocket ? (
+                <>
+                  Hoje <span className="font-medium tabular-nums text-foreground">{formatCurrency(editingPocket.balance)}</span>
+                  . A diferença vira um ajuste.
+                </>
+              ) : null
+            }
+          >
+            <CurrencyInput
+              id="edit-balance"
+              allowNegative
+              value={editForm.watch("newBalance") ?? 0}
+              onChange={(v) => editForm.setValue("newBalance", v)}
+            />
+          </Field>
+          <FormActions>
+            <Button type="button" variant="outline" onClick={() => setEditingPocket(null)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={updatePocket.isPending || createAdjustment.isPending}>
+              {updatePocket.isPending || createAdjustment.isPending ? "Salvando…" : "Salvar"}
+            </Button>
+          </FormActions>
+        </form>
+      </Modal>
+
+      <Modal open={openTransfer} onClose={() => setOpenTransfer(false)} title="transferir" size="md">
+        <form onSubmit={onTransfer} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="De">
+              <SelectOptions
+                aria-label="Origem"
+                value={transferFromType}
+                onValueChange={(v) => {
+                  transferForm.setValue("fromType", v as "account" | "pocket");
+                  if (v !== "pocket") transferForm.setValue("fromPocketId", "");
+                }}
+                options={[
+                  { value: "account", label: "Conta corrente" },
+                  { value: "pocket", label: "Caixinha" },
+                ]}
+              />
+            </Field>
+            {transferFromType === "pocket" ? (
+              <Field label="Caixinha de origem" error={transferErrors.fromPocketId?.message}>
+                <SelectOptions
+                  aria-label="Caixinha de origem"
+                  value={transferForm.watch("fromPocketId") ?? ""}
+                  onValueChange={(v) => transferForm.setValue("fromPocketId", v)}
+                  options={pocketOptions}
+                />
+              </Field>
+            ) : null}
           </div>
-        </CardHeader>
-        <CardContent>
-
-        <Modal open={openCreatePocket} onClose={() => setOpenCreatePocket(false)} title="Nova caixinha" size="md">
-          <form onSubmit={onCreatePocket} className="space-y-4">
-            <div>
-              <Label htmlFor="pocket-name">Nome</Label>
-              <Input id="pocket-name" placeholder="Ex: Reserva de emergência" {...pocketForm.register("name")} />
-            </div>
-            <div>
-              <Label htmlFor="pocket-desc">Descrição (opcional)</Label>
-              <Input id="pocket-desc" placeholder="Ex: Para imprevistos" {...pocketForm.register("description")} />
-            </div>
-            <div>
-              <Label htmlFor="pocket-initial">Valor inicial</Label>
-              <CurrencyInput
-                id="pocket-initial"
-                value={pocketForm.watch("initialAmount") ?? 0}
-                onChange={(v) => pocketForm.setValue("initialAmount", v)}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Para" error={transferErrors.toType?.message}>
+              <SelectOptions
+                aria-label="Destino"
+                value={transferToType}
+                onValueChange={(v) => {
+                  transferForm.setValue("toType", v as "account" | "pocket");
+                  if (v !== "pocket") transferForm.setValue("toPocketId", "");
+                }}
+                options={[
+                  { value: "account", label: "Conta corrente" },
+                  { value: "pocket", label: "Caixinha" },
+                ]}
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Saldo inicial da caixinha (não altera a conta corrente).
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpenCreatePocket(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={createPocket.isPending}>
-                {createPocket.isPending ? "Criando..." : "Criar caixinha"}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-
-        <Modal
-          open={!!editingPocket}
-          onClose={() => setEditingPocket(null)}
-          title="Editar caixinha"
-          size="md"
-        >
-          <form onSubmit={onEditPocket} className="space-y-4">
-            <div>
-              <Label htmlFor="edit-name">Nome</Label>
-              <Input
-                id="edit-name"
-                placeholder="Ex: Reserva de emergência"
-                {...editForm.register("name")}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-desc">Descrição (opcional)</Label>
-              <Input
-                id="edit-desc"
-                placeholder="Ex: Para imprevistos"
-                {...editForm.register("description")}
-              />
-            </div>
-            <div>
-              <Label>Saldo atual</Label>
-              <p className="text-lg font-semibold tabular-nums text-foreground">
-                {editingPocket ? formatCurrency(editingPocket.balance) : "—"}
-              </p>
-            </div>
-            <div>
-              <Label htmlFor="edit-balance">Novo saldo</Label>
-              <CurrencyInput
-                id="edit-balance"
-                value={editForm.watch("newBalance") ?? 0}
-                onChange={(v) => editForm.setValue("newBalance", v)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Altere o valor para corrigir o saldo da caixinha (gera um ajuste).
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditingPocket(null)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={updatePocket.isPending || createAdjustment.isPending}>
-                {updatePocket.isPending || createAdjustment.isPending ? "Salvando..." : "Salvar"}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-
-        <Modal open={openTransfer} onClose={() => setOpenTransfer(false)} title="Transferir" size="md">
-          <form onSubmit={onTransfer} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Origem</Label>
+            </Field>
+            {transferToType === "pocket" ? (
+              <Field label="Caixinha de destino" error={transferErrors.toPocketId?.message}>
                 <SelectOptions
-                  value={transferFromType}
-                  onValueChange={(v) => {
-                    transferForm.setValue("fromType", v as "account" | "pocket");
-                    if (v !== "pocket") transferForm.setValue("fromPocketId", "");
-                  }}
-                  options={[
-                    { value: "account", label: "Conta corrente" },
-                    { value: "pocket", label: "Caixinha" },
-                  ]}
+                  aria-label="Caixinha de destino"
+                  value={transferForm.watch("toPocketId") ?? ""}
+                  onValueChange={(v) => transferForm.setValue("toPocketId", v)}
+                  options={pocketOptions}
                 />
-              </div>
-              {transferFromType === "pocket" && (
-                <div>
-                  <Label>Caixinha de origem</Label>
-                  <SelectOptions
-                    value={transferForm.watch("fromPocketId") ?? ""}
-                    onValueChange={(v) => transferForm.setValue("fromPocketId", v)}
-                    options={[
-                      { value: "", label: "Selecione a caixinha" },
-                      ...(pockets.data ?? []).map((p) => ({ value: p.id, label: p.name })),
-                    ]}
-                  />
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label>Destino</Label>
-                <SelectOptions
-                  value={transferToType}
-                  onValueChange={(v) => {
-                    transferForm.setValue("toType", v as "account" | "pocket");
-                    if (v !== "pocket") transferForm.setValue("toPocketId", "");
-                  }}
-                  options={[
-                    { value: "account", label: "Conta corrente" },
-                    { value: "pocket", label: "Caixinha" },
-                  ]}
-                />
-              </div>
-              {transferToType === "pocket" && (
-                <div>
-                  <Label>Caixinha de destino</Label>
-                  <SelectOptions
-                    value={transferForm.watch("toPocketId") ?? ""}
-                    onValueChange={(v) => transferForm.setValue("toPocketId", v)}
-                    options={[
-                      { value: "", label: "Selecione a caixinha" },
-                      ...(pockets.data ?? []).map((p) => ({ value: p.id, label: p.name })),
-                    ]}
-                  />
-                </div>
-              )}
-            </div>
-            <div>
-              <Label>Valor</Label>
+              </Field>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Valor" htmlFor="transfer-amount">
               <CurrencyInput
+                id="transfer-amount"
                 value={transferForm.watch("amount") ?? 0}
                 onChange={(v) => transferForm.setValue("amount", v)}
               />
-            </div>
-            <div>
-              <Label>Data</Label>
-              <Input type="date" {...transferForm.register("transferDate")} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpenTransfer(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={transferToPocket.isPending}>
-                {transferToPocket.isPending ? "Transferindo..." : "Transferir"}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-
-        <div className="space-y-3">
-          {(pockets.data ?? []).map((pocket) => (
-            <div
-              key={pocket.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 dark:bg-muted/20"
-            >
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">{pocket.name}</p>
-                {pocket.description && (
-                  <p className="mt-0.5 text-sm text-muted-foreground">{pocket.description}</p>
-                )}
-                {pocket.balance < 0 && (
-                  <Badge variant="destructive" className="mt-1.5">
-                    Saldo negativo na caixinha
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <p className={`text-lg font-semibold tabular-nums ${pocket.balance < 0 ? "text-destructive" : "text-foreground"}`}>
-                  {formatCurrency(pocket.balance)}
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => openEdit(pocket)}
-                  aria-label="Editar caixinha"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-        </CardContent>
-      </Card>
+            </Field>
+            <Field label="Data" htmlFor="transfer-date">
+              <Input id="transfer-date" type="date" {...transferForm.register("transferDate")} />
+            </Field>
+          </div>
+          <FormActions>
+            <Button type="button" variant="outline" onClick={() => setOpenTransfer(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={transferToPocket.isPending}>
+              {transferToPocket.isPending ? "Transferindo…" : "Transferir"}
+            </Button>
+          </FormActions>
+        </form>
+      </Modal>
     </div>
   );
 }

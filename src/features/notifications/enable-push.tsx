@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 
 type PushStatus = "unsupported" | "loading" | "denied" | "subscribed" | "unsubscribed";
 
@@ -128,43 +127,35 @@ export function EnablePushCard() {
   if (status === "loading") return null;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          {status === "subscribed" ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-          Alertas de vencimento
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Receba um aviso no celular/desktop quando faturas, compras ou recorrentes vencerem hoje ou
-          amanhã. No iPhone, instale o app na Tela de Início.
-        </p>
-      </CardHeader>
-      <CardContent>
-        {status === "unsupported" && (
-          <p className="text-sm text-muted-foreground">
-            Push não disponível neste navegador (ou o app ainda não está em modo PWA / produção).
+    <section aria-labelledby="push-heading" className="border-t-2 border-foreground pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="push-heading" className="flex items-center gap-2 text-[15px] font-bold lowercase text-foreground">
+            {status === "subscribed" ? <BellRing className="size-4" aria-hidden /> : <Bell className="size-4" aria-hidden />}
+            alertas de vencimento
+          </h2>
+          <p className="mt-1 text-[15px] text-muted-foreground">
+            {status === "unsupported"
+              ? "Indisponível neste navegador. No iPhone, instale o app na Tela de Início."
+              : status === "denied"
+                ? "Bloqueado nas configurações do navegador."
+                : status === "subscribed"
+                  ? "Ativo neste aparelho: um aviso por dia do que vence hoje ou amanhã."
+                  : "Um aviso por dia do que vence hoje ou amanhã."}
           </p>
-        )}
-        {status === "denied" && (
-          <p className="flex items-start gap-2 text-sm text-muted-foreground">
-            <BellOff className="mt-0.5 h-4 w-4 shrink-0" />
-            Permissão bloqueada nas configurações do navegador/sistema.
-          </p>
-        )}
-        {status === "unsubscribed" && (
-          <Button type="button" onClick={subscribe} disabled={busy}>
-            Ativar notificações
+        </div>
+        {status === "unsubscribed" ? (
+          <Button type="button" size="sm" onClick={subscribe} disabled={busy}>
+            ativar
           </Button>
-        )}
-        {status === "subscribed" && (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-muted-foreground">Notificações ativas neste dispositivo.</p>
-            <Button type="button" variant="outline" size="sm" onClick={unsubscribe} disabled={busy}>
-              Desativar
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        ) : status === "subscribed" ? (
+          <Button type="button" variant="ghost" size="sm" onClick={unsubscribe} disabled={busy}>
+            desativar
+          </Button>
+        ) : status === "denied" ? (
+          <BellOff className="size-4 text-muted-foreground" aria-hidden />
+        ) : null}
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Tags, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -12,11 +12,11 @@ import {
   useDeleteCategory,
   useUpdateCategory,
 } from "@/shared/hooks/use-app-data";
+import { LedgerRow, LedgerSkeleton } from "@/features/month/ledger";
 import { Button } from "@/shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { Field, FormActions, PageHeader } from "@/shared/ui/page-header";
 
 type EditForm = { name: string };
 
@@ -76,101 +76,110 @@ export function CategoryManagement() {
   const list = categories.data ?? [];
   const isLoading = categories.isLoading;
 
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <CardTitle className="text-lg sm:text-xl">Lista</CardTitle>
-          <Button className="w-full sm:w-auto" onClick={() => setOpenCreate(true)}>
-            Nova categoria
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
-          ) : list.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma categoria ainda.</p>
-          ) : (
-            <ul className="divide-y divide-border rounded-lg border border-border/80">
-              {list.map((c) => (
-                <li
-                  key={c.id}
-                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 sm:px-4"
-                >
-                  <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
-                    <Tags className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="truncate">{c.name}</span>
-                  </span>
-                  <div className="flex shrink-0 gap-1">
-                    <Button type="button" variant="ghost" size="icon" aria-label="Editar" onClick={() => openEdit(c)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      aria-label="Excluir"
-                      onClick={() => setDeleting(c)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+  const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
 
-      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Nova categoria" size="sm">
+  return (
+    <div className="pb-4">
+      <PageHeader
+        title="categorias"
+        actions={
+          <Button size="sm" className="gap-1.5" onClick={() => setOpenCreate(true)}>
+            <Plus aria-hidden />
+            nova
+          </Button>
+        }
+      />
+      {!isLoading && list.length > 0 ? (
+        <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">
+          {list.length} {list.length === 1 ? "categoria" : "categorias"}
+        </p>
+      ) : null}
+
+      {isLoading ? (
+        <LedgerSkeleton />
+      ) : categories.isError ? (
+        <p className="py-10 text-[15px] text-ink-out">Não foi possível carregar as categorias. Recarregue a página.</p>
+      ) : list.length === 0 ? (
+        <div className="space-y-4 py-10">
+          <p className="text-[15px] text-muted-foreground">Nenhuma categoria ainda.</p>
+          <Button onClick={() => setOpenCreate(true)} className="gap-2">
+            <Plus aria-hidden />
+            criar a primeira categoria
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-6 border-t-2 border-foreground">
+          {sorted.map((c) => (
+            <LedgerRow
+              key={c.id}
+              tile={null}
+              title={c.name}
+              amount={null}
+              onOpen={() => openEdit(c)}
+              openLabel={`Renomear ${c.name}`}
+              action={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-mr-2 text-muted-foreground hover:text-ink-out"
+                  aria-label={`Excluir ${c.name}`}
+                  onClick={() => setDeleting(c)}
+                >
+                  <Trash2 />
+                </Button>
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="nova categoria" size="sm">
         <form onSubmit={onCreate} className="space-y-4">
-          <div>
-            <Label htmlFor="cat-create-name">Nome</Label>
+          <Field label="Nome" htmlFor="cat-create-name">
             <Input id="cat-create-name" placeholder="Ex: Alimentação" {...createForm.register("name", { required: true })} />
-          </div>
-          <div className="flex justify-end gap-2">
+          </Field>
+          <FormActions>
             <Button type="button" variant="outline" onClick={() => setOpenCreate(false)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={createCategory.isPending}>
               {createCategory.isPending ? "Salvando…" : "Criar"}
             </Button>
-          </div>
+          </FormActions>
         </form>
       </Modal>
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Editar categoria" size="sm">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="renomear categoria" size="sm">
         <form onSubmit={onEdit} className="space-y-4">
-          <div>
-            <Label htmlFor="cat-edit-name">Nome</Label>
+          <Field label="Nome" htmlFor="cat-edit-name">
             <Input id="cat-edit-name" {...editForm.register("name", { required: true })} />
-          </div>
-          <div className="flex justify-end gap-2">
+          </Field>
+          <FormActions>
             <Button type="button" variant="outline" onClick={() => setEditing(null)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={updateCategory.isPending}>
               {updateCategory.isPending ? "Salvando…" : "Salvar"}
             </Button>
-          </div>
+          </FormActions>
         </form>
       </Modal>
 
-      <Modal open={!!deleting} onClose={() => setDeleting(null)} title="Excluir categoria" size="sm">
+      <Modal open={!!deleting} onClose={() => setDeleting(null)} title="excluir categoria?" size="sm">
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            A categoria <span className="font-medium text-foreground">&quot;{deleting?.name}&quot;</span> será removida.
-            Compras e recorrentes que usavam essa categoria ficarão sem categoria.
+          <p className="text-[15px] text-muted-foreground">
+            <span className="font-medium text-foreground">{deleting?.name}</span> sai da lista. Compras e recorrentes que
+            usavam essa categoria ficam sem categoria.
           </p>
-          <div className="flex justify-end gap-2">
+          <FormActions>
             <Button type="button" variant="outline" onClick={() => setDeleting(null)}>
               Cancelar
             </Button>
             <Button type="button" variant="destructive" onClick={onConfirmDelete} disabled={deleteCategory.isPending}>
               {deleteCategory.isPending ? "Excluindo…" : "Excluir"}
             </Button>
-          </div>
+          </FormActions>
         </div>
       </Modal>
     </div>
