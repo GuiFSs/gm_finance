@@ -144,9 +144,9 @@ function FormSection({
 }) {
   return (
     <section className={className}>
-      <div className="mb-3 space-y-1">
-        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      <div className="mb-3 flex items-baseline justify-between gap-3 border-b-2 border-foreground pb-1.5">
+        <h4 className="text-[15px] font-bold lowercase text-foreground">{title}</h4>
+        {description ? <p className="text-[15px] text-muted-foreground">{description}</p> : null}
       </div>
       <div className="space-y-4">{children}</div>
     </section>
@@ -491,37 +491,48 @@ function PurchaseFormFields({
 
   const formContent = (
     <form onSubmit={submit} className={onSuccess ? "space-y-5" : "space-y-8"}>
-      {!purchaseId ? (
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/25 p-3 dark:bg-muted/15">
-          <p className="text-sm text-muted-foreground">
-            {voiceState === "listening"
-              ? "Gravando… Use Enviar para interpretar ou Parar para descartar (máx. 30s)."
-              : voiceState === "parsing"
-                ? "Interpretando o áudio…"
-                : "Toque em Falar, diga a despesa e depois Enviar. O formulário será preenchido para você revisar."}
-          </p>
-          {voiceState === "listening" ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <FormSection title="compra">
+        <div>
+          <Label htmlFor="amount">Valor{installments > 1 ? " total" : ""}</Label>
+          <CurrencyInput
+            id="amount"
+            className="h-14 text-2xl font-bold"
+            value={form.watch("amount") ?? 0}
+            onChange={(v) => form.setValue("amount", v)}
+          />
+          {installments > 1 ? (
+            <p className="mt-1.5 text-[15px] text-muted-foreground tabular-nums">
+              {installments} × {formatCurrency(amountPerInstallment)}
+            </p>
+          ) : null}
+        </div>
+        <div>
+          <Label htmlFor="title">Título</Label>
+          <Input id="title" {...form.register("title")} placeholder="Ex: Supermercado" />
+        </div>
+        <div>
+          <Label htmlFor="description">Descrição (opcional)</Label>
+          <Input id="description" {...form.register("description")} placeholder="Ex: Compras do mês" />
+        </div>
+        {!purchaseId ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {voiceState === "listening" ? (
+              <>
+                <span className="text-[15px] text-ink-open">Gravando…</span>
+                <Button type="button" variant="outline" className="h-11 gap-2" onClick={cancelRecording}>
+                  <X className="h-4 w-4" />
+                  Parar
+                </Button>
+                <Button type="button" className="h-11 gap-2" onClick={sendRecording}>
+                  <Send className="h-4 w-4" />
+                  Enviar
+                </Button>
+              </>
+            ) : (
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 w-full gap-2 sm:w-auto"
-                onClick={cancelRecording}
-              >
-                <X className="h-4 w-4" />
-                Parar
-              </Button>
-              <Button type="button" className="h-11 w-full gap-2 sm:w-auto" onClick={sendRecording}>
-                <Send className="h-4 w-4" />
-                Enviar
-              </Button>
-            </div>
-          ) : (
-            <div className="flex sm:justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-11 w-full gap-2 sm:w-auto"
+                className="h-11 gap-2"
                 onClick={() => void startRecording()}
                 disabled={voiceState === "parsing"}
               >
@@ -533,158 +544,93 @@ function PurchaseFormFields({
                 ) : (
                   <>
                     <Mic className="h-4 w-4" />
-                    Falar
+                    Preencher falando
                   </>
                 )}
               </Button>
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <FormSection title="Sobre a despesa" description="Nome e detalhes opcionais.">
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="title">Título</Label>
-            <Input id="title" {...form.register("title")} placeholder="Ex: Supermercado" />
+            )}
           </div>
-          <div>
-            <Label htmlFor="description">Descrição (opcional)</Label>
-            <Input id="description" {...form.register("description")} placeholder="Ex: Compras do mês" />
-          </div>
-        </div>
+        ) : null}
       </FormSection>
 
-      <FormSection
-        title="Valor, datas e pagamento"
-        description={
-          debitsFromBalance
-            ? "Defina o valor, quando debitar do saldo e por onde sai o dinheiro."
-            : "Valor, data da compra no cartão e forma de pagamento."
-        }
-      >
-        <div className="rounded-xl border border-border bg-muted/25 p-4 shadow-sm dark:bg-muted/15">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="amount">Valor {installments > 1 ? "total" : ""}</Label>
-              <CurrencyInput
-                id="amount"
-                value={form.watch("amount") ?? 0}
-                onChange={(v) => form.setValue("amount", v)}
-              />
-              {installments > 1 ? (
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  {installments} × {formatCurrency(amountPerInstallment)}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <Label htmlFor="purchaseDate">
-                {debitsFromBalance
-                  ? installments > 1
-                    ? "Data do 1º débito"
-                    : "Data do débito"
-                  : "Data da compra"}
-              </Label>
-              <Input id="purchaseDate" type="date" {...form.register("purchaseDate")} />
-              {debitsFromBalance ? (
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  {installments > 1
-                    ? "Próximas parcelas: mesmo dia do mês, mês a mês."
-                    : "Pode ser hoje ou uma data futura."}
-                </p>
-              ) : (
-                <p className="mt-1.5 text-xs text-muted-foreground">Usada na fatura do cartão.</p>
+      <FormSection title="pagamento">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="paymentSourceType">Pagar com</Label>
+            <Controller
+              name="paymentSourceType"
+              control={control}
+              render={({ field }) => (
+                <SelectOptions
+                  key={`pay-type-${selectHydrationKey}`}
+                  id="paymentSourceType"
+                  value={field.value}
+                  onValueChange={(v) => {
+                    const type = v as FormValues["paymentSourceType"];
+                    const prev = field.value;
+                    field.onChange(type);
+                    if (type !== prev) {
+                      form.setValue("paymentSourceId", type === "account" ? "" : "");
+                    }
+                  }}
+                  options={[
+                    { value: "account", label: "Conta corrente" },
+                    { value: "pocket", label: "Caixinha" },
+                    { value: "card", label: "Cartão de crédito" },
+                  ]}
+                />
               )}
-            </div>
+            />
           </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border/80 pt-4 sm:grid-cols-3">
-            <div>
-              <Label htmlFor="paymentSourceType">Pagar com</Label>
-              <Controller
-                name="paymentSourceType"
-                control={control}
-                render={({ field }) => (
-                  <SelectOptions
-                    key={`pay-type-${selectHydrationKey}`}
-                    id="paymentSourceType"
-                    value={field.value}
-                    onValueChange={(v) => {
-                      const type = v as FormValues["paymentSourceType"];
-                      const prev = field.value;
-                      field.onChange(type);
-                      if (type !== prev) {
-                        form.setValue("paymentSourceId", type === "account" ? "" : "");
-                      }
-                    }}
-                    options={[
-                      { value: "account", label: "Conta corrente" },
-                      { value: "pocket", label: "Caixinha" },
-                      { value: "card", label: "Cartão de crédito" },
-                    ]}
-                  />
-                )}
-              />
-            </div>
-            <div>
-              <Label htmlFor="paymentSourceId">Fonte</Label>
-              <Controller
-                name="paymentSourceId"
-                control={control}
-                render={({ field }) => (
-                  <SelectOptions
-                    key={`pay-src-${paymentSourceType}-${selectHydrationKey}`}
-                    id="paymentSourceId"
-                    value={field.value ?? ""}
-                    onValueChange={(v) => field.onChange(v)}
-                    options={sourceOptions}
-                  />
-                )}
-              />
-            </div>
-            <div>
-              <Label htmlFor="installmentCount">Parcelas</Label>
-              <Input
-                id="installmentCount"
-                type="number"
-                min={1}
-                max={48}
-                {...form.register("installmentCount", { valueAsNumber: true })}
-              />
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                {debitsFromBalance ? "1 = à vista no saldo." : "1 = à vista no cartão."}
-              </p>
-            </div>
+          <div>
+            <Label htmlFor="paymentSourceId">Fonte</Label>
+            <Controller
+              name="paymentSourceId"
+              control={control}
+              render={({ field }) => (
+                <SelectOptions
+                  key={`pay-src-${paymentSourceType}-${selectHydrationKey}`}
+                  id="paymentSourceId"
+                  value={field.value ?? ""}
+                  onValueChange={(v) => field.onChange(v)}
+                  options={sourceOptions}
+                />
+              )}
+            />
           </div>
-
-          {debitsFromBalance && debitSchedulePreview.length > 0 ? (
-            <div className="mt-4 rounded-lg border border-border/80 bg-background/80 px-3 py-2.5">
-              <p className="text-xs font-medium text-foreground">
-                {installments > 1 ? "Quando será debitado" : "Débito"}
-              </p>
-              <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                {debitSchedulePreview.map((iso, idx) => (
-                  <li key={iso} className="flex justify-between gap-2 tabular-nums">
-                    <span>
-                      {installments > 1 ? (
-                        <>
-                          {idx + 1}/{installments}
-                        </>
-                      ) : (
-                        "Saldo"
-                      )}
-                    </span>
-                    <span className="font-medium text-foreground">{formatDisplayDate(iso)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          <div>
+            <Label htmlFor="purchaseDate">
+              {debitsFromBalance ? (installments > 1 ? "Data do 1º débito" : "Data do débito") : "Data da compra"}
+            </Label>
+            <Input id="purchaseDate" type="date" {...form.register("purchaseDate")} />
+          </div>
+          <div>
+            <Label htmlFor="installmentCount">Parcelas</Label>
+            <Input
+              id="installmentCount"
+              type="number"
+              min={1}
+              max={48}
+              {...form.register("installmentCount", { valueAsNumber: true })}
+            />
+          </div>
         </div>
+
+        {debitsFromBalance && installments > 1 && debitSchedulePreview.length > 0 ? (
+          <ul className="text-[15px] text-muted-foreground">
+            {debitSchedulePreview.map((iso, idx) => (
+              <li key={iso} className="flex justify-between gap-2 border-t border-border py-1.5 tabular-nums">
+                <span>
+                  {idx + 1}/{installments}
+                </span>
+                <span className="text-foreground">{formatDisplayDate(iso)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </FormSection>
 
-      <FormSection title="Categoria" description="Opcional — ajuda a filtrar relatórios.">
+      <FormSection title="categoria">
         <div className="space-y-3">
           <div>
             <Label htmlFor="categoryId">Categoria</Label>
@@ -756,7 +702,7 @@ function PurchaseFormFields({
         </div>
       </FormSection>
 
-      <FormSection title="Tags" description="Nomes de tags já cadastradas, separados por vírgula.">
+      <FormSection title="tags" description="separadas por vírgula">
         <div>
           <Label htmlFor="tags">Tags</Label>
           <Input

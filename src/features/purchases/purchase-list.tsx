@@ -1,20 +1,6 @@
 "use client";
 
-import {
-  ArrowDownUp,
-  Calendar,
-  ChevronRight,
-  ChevronsUpDown,
-  CreditCard,
-  Filter,
-  Landmark,
-  Loader2,
-  PiggyBank,
-  Plus,
-  ReceiptText,
-  Tag as TagIcon,
-  User,
-} from "lucide-react";
+import { ChevronsUpDown, ListFilter, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -31,22 +17,23 @@ import {
   useUsers,
   type PurchaseRow,
 } from "@/shared/hooks/use-app-data";
-import { formatCalendarMonthLabel, formatCurrency, formatDisplayDate } from "@/shared/utils/formatters";
-import { Badge } from "@/shared/ui/badge";
+import { DayTile, LedgerRow } from "@/features/month/ledger";
+import { dayOfMonth, formatAmount, monthLabel } from "@/features/month/month-model";
+import { formatCurrency } from "@/shared/utils/formatters";
 import { Button } from "@/shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
 import { SelectOptions } from "@/shared/ui/select-options";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/shared/ui/sheet";
 import { PurchaseForm } from "@/features/purchases/purchase-form";
 
 const PAYMENT_LABEL: Record<string, string> = {
-  account: "Conta corrente",
-  pocket: "Caixinha",
-  card: "Cartão",
+  account: "conta",
+  pocket: "caixinha",
+  card: "cartão",
 };
 
 const defaultFilters = {
@@ -90,8 +77,8 @@ function MultiEntityFilter({
   }, [emptySummary, options, selectedIds]);
 
   return (
-    <div className="space-y-2">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="space-y-1.5">
+      <span className="text-[15px] font-medium text-foreground">{label}</span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" role="combobox" className="h-10 w-full justify-between font-normal" type="button">
@@ -199,13 +186,49 @@ function sortPurchaseGroups(groups: PurchaseGroup[], sortKey: PurchaseSortKey): 
   return copy;
 }
 
-function PaymentSourceBadge({ type }: { type: PurchaseRow["paymentSourceType"] }) {
-  const Icon = type === "card" ? CreditCard : type === "pocket" ? PiggyBank : Landmark;
+function groupByMonth(groups: PurchaseGroup[]) {
+  const out: Array<{ month: string; items: PurchaseGroup[]; total: number }> = [];
+  for (const g of groups) {
+    const month = g.firstDate.slice(0, 7);
+    const last = out[out.length - 1];
+    if (last && last.month === month) {
+      last.items.push(g);
+      last.total += g.totalAmount;
+    } else {
+      out.push({ month, items: [g], total: g.totalAmount });
+    }
+  }
+  return out;
+}
+
+function PurchaseRowItem({ g, onOpen }: { g: PurchaseGroup; onOpen: () => void }) {
+  const meta = [
+    g.categoryName ?? "sem categoria",
+    PAYMENT_LABEL[g.paymentSourceType] ?? g.paymentSourceType,
+    g.installmentCount > 1 ? `${g.installmentCount}×` : null,
+    g.userName,
+    ...g.tags.map((t) => `#${t}`),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground">
-      <Icon className="h-3 w-3 shrink-0 opacity-70" />
-      {PAYMENT_LABEL[type] ?? type}
-    </span>
+    <LedgerRow
+      tile={<DayTile day={dayOfMonth(g.firstDate)} tone="neutral" />}
+      title={g.title}
+      meta={meta}
+      amount={
+        <span className="block">
+          {formatAmount(g.totalAmount, "−")}
+          {g.installmentCount > 1 ? (
+            <span className="block text-[15px] font-normal text-muted-foreground">
+              {g.installmentCount}× {formatAmount(g.totalAmount / g.installmentCount)}
+            </span>
+          ) : null}
+        </span>
+      }
+      onOpen={onOpen}
+      openLabel={`Ver ${g.title}`}
+    />
   );
 }
 
@@ -218,16 +241,17 @@ export function PurchaseList() {
   const [openCategoryModal, setOpenCategoryModal] = useState(false);
   const [openTagModal, setOpenTagModal] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<PurchaseSortKey>("date_desc");
 
   const editFromUrl = searchParams.get("edit");
+  const newFromUrl = searchParams.get("new");
   useEffect(() => {
-    if (!editFromUrl) return;
+    if (!editFromUrl && !newFromUrl) return;
     setEditPurchaseId(editFromUrl);
     setOpenPurchaseModal(true);
     router.replace("/purchases", { scroll: false });
-  }, [editFromUrl, router]);
+  }, [editFromUrl, newFromUrl, router]);
 
   const purchases = usePurchases({
     categoryIds: filters.categoryIds.length ? filters.categoryIds : undefined,
@@ -262,20 +286,40 @@ export function PurchaseList() {
     setOpenTagModal(false);
   });
 
-  const hasActiveFilters =
-    filters.categoryIds.length > 0 ||
-    filters.tagIds.length > 0 ||
-    Boolean(filters.userId) ||
-    Boolean(filters.startDate) ||
-    Boolean(filters.endDate);
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    const catName = new Map((categories.data ?? []).map((c) => [c.id, c.name]));
+    const tagName = new Map((tags.data ?? []).map((t) => [t.id, t.name]));
+    for (const id of filters.categoryIds) labels.push(catName.get(id) ?? "categoria");
+    for (const id of filters.tagIds) labels.push(`#${tagName.get(id) ?? "tag"}`);
+    if (filters.userId) labels.push((users.data ?? []).find((u) => u.id === filters.userId)?.name ?? "usuário");
+    if (filters.startDate || filters.endDate) {
+      const fmt = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+      labels.push(
+        filters.startDate && filters.endDate
+          ? `${fmt(filters.startDate)}–${fmt(filters.endDate)}`
+          : filters.startDate
+            ? `desde ${fmt(filters.startDate)}`
+            : `até ${fmt(filters.endDate)}`,
+      );
+    }
+    return labels;
+  }, [filters, categories.data, tags.data, users.data]);
+  const hasActiveFilters = activeFilterLabels.length > 0;
 
   const list = purchases.data ?? [];
   const isLoading = purchases.isLoading;
-
   const grouped = useMemo(() => sortPurchaseGroups(groupPurchases(list), sortKey), [list, sortKey]);
+  const byMonth = sortKey.startsWith("date") ? groupByMonth(grouped) : null;
+  const total = grouped.reduce((s, g) => s + g.totalAmount, 0);
+
+  const openNew = () => {
+    setEditPurchaseId(null);
+    setOpenPurchaseModal(true);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="pb-4">
       <PurchaseDetailDialog
         purchaseId={detailId}
         open={detailId !== null}
@@ -291,35 +335,13 @@ export function PurchaseList() {
         onDeleted={() => setDetailId(null)}
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button
-          className="h-11 w-full gap-2 sm:w-auto"
-          size="lg"
-          onClick={() => {
-            setEditPurchaseId(null);
-            setOpenPurchaseModal(true);
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Nova despesa
-        </Button>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenCategoryModal(true)}>
-            Nova categoria
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenTagModal(true)}>
-            Nova tag
-          </Button>
-        </div>
-      </div>
-
       <Modal
         open={openPurchaseModal}
         onClose={() => {
           setOpenPurchaseModal(false);
           setEditPurchaseId(null);
         }}
-        title={editPurchaseId ? "Editar despesa" : "Nova despesa"}
+        title={editPurchaseId ? "editar compra" : "nova compra"}
         size="2xl"
       >
         <PurchaseForm
@@ -338,7 +360,7 @@ export function PurchaseList() {
 
       <Modal open={openCategoryModal} onClose={() => setOpenCategoryModal(false)} title="Nova categoria" size="sm">
         <form onSubmit={addCategory} className="space-y-4">
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="new-category">Nome</Label>
             <Input id="new-category" placeholder="Ex: Alimentação" {...categoryForm.register("name")} />
           </div>
@@ -347,7 +369,7 @@ export function PurchaseList() {
               Cancelar
             </Button>
             <Button type="submit" disabled={createCategory.isPending}>
-              {createCategory.isPending ? "Salvando..." : "Criar categoria"}
+              {createCategory.isPending ? "Salvando…" : "Criar categoria"}
             </Button>
           </div>
         </form>
@@ -355,7 +377,7 @@ export function PurchaseList() {
 
       <Modal open={openTagModal} onClose={() => setOpenTagModal(false)} title="Nova tag" size="sm">
         <form onSubmit={addTag} className="space-y-4">
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="new-tag">Nome</Label>
             <Input id="new-tag" placeholder="Ex: mercado" {...tagForm.register("name")} />
           </div>
@@ -364,39 +386,42 @@ export function PurchaseList() {
               Cancelar
             </Button>
             <Button type="submit" disabled={createTag.isPending}>
-              {createTag.isPending ? "Salvando..." : "Criar tag"}
+              {createTag.isPending ? "Salvando…" : "Criar tag"}
             </Button>
           </div>
         </form>
       </Modal>
 
-      <Card className="overflow-hidden border-border/80 shadow-sm">
-        <CardHeader className="space-y-1 border-b border-border/60 bg-muted/20 pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base font-semibold">Filtros</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Refine por categorias, tags, usuário ou período (várias categorias e tags ao mesmo tempo).
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-muted-foreground"
-              onClick={() => setFiltersExpanded((e) => !e)}
-            >
-              <Filter className="h-4 w-4" />
-              {filtersExpanded ? "Ocultar" : "Mostrar"}
+      <header className="flex items-baseline justify-between gap-4">
+        <h1 className="text-2xl font-bold lowercase leading-none tracking-tight text-foreground">compras</h1>
+      </header>
+      <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">
+        {isLoading
+          ? "Carregando…"
+          : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} · ${formatCurrency(total)}`}
+      </p>
+
+      <div className="sticky top-0 z-20 -mx-4 mt-4 flex items-center gap-2 border-b border-border bg-background px-4 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:-mx-6 sm:px-6 md:static md:mx-0 md:px-0 md:pt-2">
+        <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <ListFilter aria-hidden />
+              filtros
+              {hasActiveFilters ? (
+                <span className="grid min-w-5 place-items-center bg-foreground px-1 text-xs text-background tabular-nums">
+                  {activeFilterLabels.length}
+                </span>
+              ) : null}
             </Button>
-          </div>
-        </CardHeader>
-        {filtersExpanded && (
-          <CardContent className="space-y-4 pt-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          </SheetTrigger>
+          <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-sm">
+            <SheetHeader className="border-b border-border px-5 py-4 text-left">
+              <SheetTitle className="text-2xl font-bold lowercase">filtros</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 space-y-5 px-5 py-5">
               <MultiEntityFilter
                 label="Categorias"
-                emptySummary="Todas as categorias"
+                emptySummary="Todas"
                 clearLabel="Limpar categorias"
                 options={(categories.data ?? []).map((item) => ({ id: item.id, name: item.name }))}
                 selectedIds={filters.categoryIds}
@@ -404,204 +429,136 @@ export function PurchaseList() {
               />
               <MultiEntityFilter
                 label="Tags"
-                emptySummary="Todas as tags"
+                emptySummary="Todas"
                 clearLabel="Limpar tags"
                 options={(tags.data ?? []).map((item) => ({ id: item.id, name: item.name }))}
                 selectedIds={filters.tagIds}
                 onChange={(tagIds) => setFilters((prev) => ({ ...prev, tagIds }))}
               />
-              <div className="space-y-2">
-                <Label htmlFor="filter-user" className="text-xs text-muted-foreground">
-                  Usuário
-                </Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="filter-user">Quem lançou</Label>
                 <SelectOptions
                   id="filter-user"
                   value={filters.userId}
                   onValueChange={(v) => setFilters((prev) => ({ ...prev, userId: v }))}
                   options={[
-                    { value: "", label: "Todos" },
+                    { value: "", label: "Os dois" },
                     ...(users.data ?? []).map((item) => ({ value: item.id, label: item.name })),
                   ]}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="filter-start" className="text-xs text-muted-foreground">
-                  Data inicial
-                </Label>
-                <Input
-                  id="filter-start"
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-start">De</Label>
+                  <Input
+                    id="filter-start"
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="filter-end">Até</Label>
+                  <Input
+                    id="filter-end"
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="filter-end" className="text-xs text-muted-foreground">
-                  Data final
-                </Label>
-                <Input
-                  id="filter-end"
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-                />
+              <div className="flex gap-2 border-t border-border pt-5">
+                <Button variant="outline" size="sm" onClick={() => setOpenCategoryModal(true)}>
+                  nova categoria
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setOpenTagModal(true)}>
+                  nova tag
+                </Button>
               </div>
             </div>
-            {hasActiveFilters && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setFilters(defaultFilters)}
-                className="text-muted-foreground"
-              >
-                Limpar filtros
+            <div className="flex gap-2 border-t border-border px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <Button variant="ghost" className="flex-1" disabled={!hasActiveFilters} onClick={() => setFilters(defaultFilters)}>
+                limpar
               </Button>
-            )}
-          </CardContent>
-        )}
-      </Card>
+              <Button className="flex-1" onClick={() => setFiltersOpen(false)}>
+                ver {grouped.length} {grouped.length === 1 ? "compra" : "compras"}
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
 
-      <section className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">Suas despesas</h2>
-            <p className="text-sm text-muted-foreground">
-              {isLoading
-                ? "Carregando…"
-                : grouped.length === 0
-                  ? "Nenhum resultado"
-                  : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} · toque para ver detalhes`}
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[220px]">
-            <Label htmlFor="purchase-sort" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ArrowDownUp className="h-3.5 w-3.5" />
-              Ordenar por
-            </Label>
-            <SelectOptions
-              id="purchase-sort"
-              value={sortKey}
-              onValueChange={(v) => setSortKey(v as PurchaseSortKey)}
-              options={[
-                { value: "date_desc", label: "Data (mais recente)" },
-                { value: "date_asc", label: "Data (mais antiga)" },
-                { value: "amount_desc", label: "Valor (maior primeiro)" },
-                { value: "amount_asc", label: "Valor (menor primeiro)" },
-              ]}
-            />
-          </div>
+        <SelectOptions
+          id="purchase-sort"
+          aria-label="Ordenar"
+          className="h-9 w-auto min-w-0 gap-2 border-input"
+          value={sortKey}
+          onValueChange={(v) => setSortKey(v as PurchaseSortKey)}
+          options={[
+            { value: "date_desc", label: "mais recentes" },
+            { value: "date_asc", label: "mais antigas" },
+            { value: "amount_desc", label: "maior valor" },
+            { value: "amount_asc", label: "menor valor" },
+          ]}
+        />
+
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={() => setFilters(defaultFilters)}
+            className="ml-auto flex min-w-0 items-center gap-1 py-1 text-[15px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <span className="truncate">{activeFilterLabels.join(", ")}</span>
+            <X className="size-4 shrink-0" aria-hidden />
+            <span className="sr-only">Limpar filtros</span>
+          </button>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3 pt-6" aria-label="Carregando">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-12 animate-pulse bg-muted" />
+          ))}
         </div>
-
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Carregando despesas…</p>
-          </div>
-        ) : grouped.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/10 py-16 text-center">
-            <div className="rounded-full bg-muted p-4">
-              <ReceiptText className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div className="max-w-sm space-y-1">
-              <p className="font-medium text-foreground">Nenhuma despesa encontrada</p>
-              <p className="text-sm text-muted-foreground">
-                {hasActiveFilters
-                  ? "Tente ajustar os filtros ou cadastre uma nova despesa."
-                  : "Cadastre sua primeira despesa para começar."}
-              </p>
-            </div>
-            <Button onClick={() => setOpenPurchaseModal(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova despesa
+      ) : purchases.isError ? (
+        <p className="py-10 text-[15px] text-ink-out">Não foi possível carregar as compras. Recarregue a página.</p>
+      ) : grouped.length === 0 ? (
+        <div className="space-y-4 py-10">
+          <p className="text-[15px] text-muted-foreground">
+            {hasActiveFilters ? "Nenhuma compra com esses filtros." : "Nenhuma compra ainda."}
+          </p>
+          {hasActiveFilters ? (
+            <Button variant="outline" onClick={() => setFilters(defaultFilters)}>
+              limpar filtros
             </Button>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {grouped.map((g) => (
-              <li key={g.key}>
-                <button
-                  type="button"
-                  onClick={() => setDetailId(g.detailPurchaseId)}
-                  className="group flex w-full items-stretch gap-0 overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:border-primary/25 hover:bg-accent/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <div className="w-1 shrink-0 bg-primary/70 opacity-80 group-hover:opacity-100" aria-hidden />
-                  <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-semibold text-foreground">{g.title}</span>
-                        <PaymentSourceBadge type={g.paymentSourceType} />
-                        {g.installmentCount > 1 ? (
-                          <Badge variant="secondary" className="font-normal tabular-nums">
-                            {g.installmentCount} parcelas
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="font-normal">
-                            À vista
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5 shrink-0" />
-                          {g.firstDate === g.lastDate
-                            ? formatDisplayDate(g.firstDate)
-                            : `${formatDisplayDate(g.firstDate)} → ${formatDisplayDate(g.lastDate)}`}
-                        </span>
-                        <span className="text-border">·</span>
-                        <span>
-                          {g.categoryName ?? "Sem categoria"}
-                        </span>
-                        {g.userName ? (
-                          <>
-                            <span className="text-border">·</span>
-                            <span className="inline-flex items-center gap-1">
-                              <User className="h-3.5 w-3.5" />
-                              {g.userName}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Primeiro pagamento
-                        </span>
-                        <span className="text-xs text-foreground">{formatCalendarMonthLabel(g.firstDate)}</span>
-                        {g.installmentCount > 1 ? (
-                          <>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Último
-                            </span>
-                            <span className="text-xs text-foreground">{formatCalendarMonthLabel(g.lastDate)}</span>
-                          </>
-                        ) : null}
-                      </div>
-                      {g.tags.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {g.tags.map((tag) => (
-                            <Badge key={tag} variant="outline" className="font-normal text-xs">
-                              <TagIcon className="mr-1 h-3 w-3 opacity-60" />
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3 sm:pl-2">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Total</p>
-                        <p className="text-lg font-semibold tabular-nums text-foreground">{formatCurrency(g.totalAmount)}</p>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
-                    </div>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          ) : (
+            <Button onClick={openNew} className="gap-2">
+              <Plus aria-hidden />
+              lançar a primeira compra
+            </Button>
+          )}
+        </div>
+      ) : byMonth ? (
+        byMonth.map((m) => (
+          <section key={m.month} className="pt-8">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-2xl font-bold lowercase leading-tight tracking-tight text-foreground">{monthLabel(m.month)}</h2>
+              <span className="text-[15px] font-medium tabular-nums text-foreground">{formatAmount(m.total, "−")}</span>
+            </div>
+            <div className="mt-2 border-t-2 border-foreground">
+              {m.items.map((g) => (
+                <PurchaseRowItem key={g.key} g={g} onOpen={() => setDetailId(g.detailPurchaseId)} />
+              ))}
+            </div>
+          </section>
+        ))
+      ) : (
+        <div className="mt-6 border-t-2 border-foreground">
+          {grouped.map((g) => (
+            <PurchaseRowItem key={g.key} g={g} onOpen={() => setDetailId(g.detailPurchaseId)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

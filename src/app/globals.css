@@ -21,27 +21,40 @@
   --popover: #ffffff;
   --popover-foreground: #0f172a;
   --input: #e2e8f0;
+  --plane-out: #dc2626;
+  --plane-open: #ca8a04;
+  --plane-in: #2563eb;
+  --ink-out: #b91c1c;
+  --ink-open: #a16207;
+  --ink-in: #1d4ed8;
 }
 
+/* Concreto: near-black ground, off-white ink, three flat pigments used as planes. */
 .dark {
-  --background: #0c1222;
-  --foreground: #e2e8f0;
-  --card: #151d2e;
-  --border: #2d3a4f;
-  --ring: #60a5fa;
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --secondary: #2d3a4f;
-  --secondary-foreground: #e2e8f0;
-  --destructive: #ef4444;
+  --background: #141414;
+  --foreground: #ebebe8;
+  --card: #1b1b1a;
+  --border: #2c2c2a;
+  --ring: #f2c230;
+  --primary: #ebebe8;
+  --primary-foreground: #141414;
+  --secondary: #2c2c2a;
+  --secondary-foreground: #ebebe8;
+  --destructive: #e2352b;
   --destructive-foreground: #ffffff;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #2d3a4f;
-  --accent-foreground: #e2e8f0;
-  --popover: #151d2e;
-  --popover-foreground: #e2e8f0;
-  --input: #2d3a4f;
+  --muted: #1f1f1e;
+  --muted-foreground: #a3a39e;
+  --accent: #262625;
+  --accent-foreground: #ebebe8;
+  --popover: #1b1b1a;
+  --popover-foreground: #ebebe8;
+  --input: #3a3a37;
+  --plane-out: #e2352b;
+  --plane-open: #f2c230;
+  --plane-in: #2f5bd3;
+  --ink-out: #ff7a6e;
+  --ink-open: #f2c230;
+  --ink-in: #93abff;
   color-scheme: dark;
 }
 
@@ -64,14 +77,52 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-input: var(--input);
-  --font-sans: var(--font-geist-sans);
+  --color-plane-out: var(--plane-out);
+  --color-plane-open: var(--plane-open);
+  --color-plane-in: var(--plane-in);
+  --color-ink-out: var(--ink-out);
+  --color-ink-open: var(--ink-open);
+  --color-ink-in: var(--ink-in);
+  --font-sans: var(--font-jost), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
+}
+
+/* Square corners are part of the world; rounded-full stays for spinners and dots. */
+@theme {
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-jost), system-ui, sans-serif;
+  font-feature-settings: "tnum" 1;
   -webkit-font-smoothing: antialiased;
+  caret-color: var(--ring);
 }
 
+::selection {
+  background: var(--plane-open);
+  color: #141414;
+}
+
+* {
+  scrollbar-color: var(--input) transparent;
+  scrollbar-width: thin;
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .plane-segment {
+    transition: flex-grow 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease-out;
+  }
+}

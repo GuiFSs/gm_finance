@@ -66,6 +66,8 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+export const VOICE_OPEN_EVENT = "gm:voice-open";
+
 export function VoiceCommandFab() {
   const currentUser = useCurrentUser();
   const pockets = usePockets();
@@ -244,6 +246,16 @@ export function VoiceCommandFab() {
     setVoiceUi("idle");
   };
 
+  useEffect(() => {
+    const onOpen = () => {
+      setPendingCommand(null);
+      setRecordOpen(true);
+      setVoiceUi("idle");
+    };
+    window.addEventListener(VOICE_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(VOICE_OPEN_EVENT, onOpen);
+  }, []);
+
   const closeRecorder = (open: boolean) => {
     if (!open) {
       if (voiceState === "parsing") return;
@@ -378,7 +390,7 @@ export function VoiceCommandFab() {
       <Button
         type="button"
         size="icon"
-        className="fixed bottom-5 right-4 z-40 h-12 w-12 rounded-full shadow-lg md:bottom-6 md:right-6"
+        className="fixed bottom-6 right-6 z-40 hidden size-12 border border-border bg-card text-foreground hover:bg-accent md:inline-flex"
         aria-label="Comando por voz"
         onClick={openRecorder}
       >

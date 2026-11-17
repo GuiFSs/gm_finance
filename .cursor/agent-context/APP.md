@@ -49,7 +49,9 @@ App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: N
 | `/budgets` | `features/budgets` |
 | `/categories` | `features/categories` |
 
-Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout.tsx`).
+Nav: shell em `src/shared/ui/app-shell.tsx` (rotas protegidas via `(protected)/layout.tsx`). Desktop: sidebar `w-60` com botão "nova compra". Mobile: tab bar fixa (início, movimentos, "+" nova compra, compras, mais); "mais" abre um Sheet com as outras rotas, "comando por voz" e "sair". Não há top bar mobile.
+
+Query params: `/purchases?new=1` abre o form de nova compra; `/purchases?edit=<id>` abre a edição. `/movements?month=YYYY-MM&status=pago|aberto|previsto|entradas` (±12 meses) filtra a lista; o dashboard usa isso ao clicar no plano do mês.
 
 ## APIs (resumo)
 
@@ -106,7 +108,7 @@ Nav: shell em `src/shared` / app-shell (rotas protegidas via `(protected)/layout
 
 ## Voz — comandos gerais (MVP)
 
-FAB de mic no `AppShell` (telas autenticadas). Parse tipado → dialog de confirmação → execução no client.
+FAB de mic no `AppShell` só no desktop (`md:`); no mobile o item "comando por voz" do Sheet "mais" dispara o evento `gm:voice-open` (`VOICE_OPEN_EVENT`), que abre o mesmo dialog. Parse tipado → dialog de confirmação → execução no client.
 
 ### Intents
 
@@ -134,7 +136,7 @@ Feature estável para agentes. **Não** reintroduzir Web Speech / Groq Whisper /
 
 ### Fluxo UX
 
-1. `/purchases` → **Nova despesa** → botão **Falar** (só modo criação; não em edição)
+1. `/purchases?new=1` (ou "+"/"nova compra") → botão **Preencher falando** (só modo criação; não em edição)
 2. Gravação com `MediaRecorder` + `getUserMedia`
 3. **Parar** — descarta áudio; **Enviar** — para e manda ao servidor (máx. ~30s)
 4. Gemini devolve campos → `reset` do `PurchaseForm` → usuário confirma e salva via `POST /api/purchases` existente

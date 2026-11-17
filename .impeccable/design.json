@@ -1,210 +1,151 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-17T12:20:00Z",
+  "generatedAt": "2026-11-17T13:10:00Z",
   "title": "Design System: G&M Finance",
   "extensions": {
     "colorMeta": {
-      "background": {
-        "role": "neutral",
-        "displayName": "Deep Ledger Navy",
-        "canonical": "#0c1222",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
-      },
-      "surface": {
-        "role": "neutral",
-        "displayName": "Ledger Card Slate",
-        "canonical": "#151d2e",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
-      },
-      "surface-muted": {
-        "role": "neutral",
-        "displayName": "Muted Slate",
-        "canonical": "#1e293b",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
-      },
-      "border": {
-        "role": "neutral",
-        "displayName": "Rule Slate",
-        "canonical": "#2d3a4f",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
-      },
-      "foreground": {
-        "role": "neutral",
-        "displayName": "Ink Mist",
-        "canonical": "#e2e8f0",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
-      },
-      "muted-foreground": {
-        "role": "neutral",
-        "displayName": "Pencil Gray",
-        "canonical": "#94a3b8",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
-      },
-      "primary": {
-        "role": "primary",
-        "displayName": "Ledger Blue",
-        "canonical": "#3b82f6",
-        "tonalRamp": ["#1e3a8a", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe", "#eff6ff"]
-      },
-      "primary-foreground": {
-        "role": "on-primary",
-        "displayName": "Paper White",
-        "canonical": "#ffffff",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0", "#ffffff"]
-      },
-      "destructive": {
-        "role": "tertiary",
-        "displayName": "Overdraft Red",
-        "canonical": "#ef4444",
-        "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fecaca", "#fef2f2"]
-      },
-      "destructive-foreground": {
-        "role": "on-destructive",
-        "displayName": "Paper White",
-        "canonical": "#ffffff",
-        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0", "#ffffff"]
-      },
-      "ring": {
-        "role": "tertiary",
-        "displayName": "Focus Sky",
-        "canonical": "#60a5fa",
-        "tonalRamp": ["#1e3a8a", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe", "#eff6ff"]
-      },
-      "income": {
-        "role": "secondary",
-        "displayName": "Money-In Green",
-        "canonical": "#4ade80",
-        "tonalRamp": ["#14532d", "#166534", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#bbf7d0", "#f0fdf4"]
-      },
-      "expense": {
-        "role": "secondary",
-        "displayName": "Money-Out Red",
-        "canonical": "#f87171",
-        "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fecaca", "#fef2f2"]
-      },
-      "attention": {
-        "role": "secondary",
-        "displayName": "Pending Amber",
-        "canonical": "#fcd34d",
-        "tonalRamp": ["#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fffbeb"]
-      }
+      "ground": { "role": "neutral", "displayName": "Ground", "canonical": "#141414", "tonalRamp": ["#0a0a0a", "#141414", "#1b1b1a", "#262625", "#3a3a37", "#6e6e69", "#a3a39e", "#ebebe8"] },
+      "surface": { "role": "neutral", "displayName": "Raised Slab", "canonical": "#1b1b1a", "tonalRamp": ["#0a0a0a", "#141414", "#1b1b1a", "#262625", "#3a3a37", "#6e6e69", "#a3a39e", "#ebebe8"] },
+      "surface-muted": { "role": "neutral", "displayName": "Quiet Slab", "canonical": "#1f1f1e", "tonalRamp": ["#0a0a0a", "#141414", "#1f1f1e", "#262625", "#3a3a37", "#6e6e69", "#a3a39e", "#ebebe8"] },
+      "surface-hover": { "role": "neutral", "displayName": "Hover Slab", "canonical": "#262625", "tonalRamp": ["#0a0a0a", "#141414", "#1f1f1e", "#262625", "#3a3a37", "#6e6e69", "#a3a39e", "#ebebe8"] },
+      "rule": { "role": "neutral", "displayName": "Rule", "canonical": "#2c2c2a", "tonalRamp": ["#0a0a0a", "#141414", "#1f1f1e", "#2c2c2a", "#3a3a37", "#6e6e69", "#a3a39e", "#ebebe8"] },
+      "rule-strong": { "role": "neutral", "displayName": "Strong Rule", "canonical": "#3a3a37", "tonalRamp": ["#0a0a0a", "#141414", "#1f1f1e", "#2c2c2a", "#3a3a37", "#6e6e69", "#a3a39e", "#ebebe8"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#ebebe8", "tonalRamp": ["#141414", "#2c2c2a", "#3a3a37", "#6e6e69", "#a3a39e", "#cfcfcb", "#ebebe8", "#f7f7f5"] },
+      "ink-muted": { "role": "neutral", "displayName": "Pencil", "canonical": "#a3a39e", "tonalRamp": ["#141414", "#2c2c2a", "#3a3a37", "#6e6e69", "#a3a39e", "#cfcfcb", "#ebebe8", "#f7f7f5"] },
+      "plane-out": { "role": "primary", "displayName": "Vermelho Ruptura", "canonical": "#e2352b", "tonalRamp": ["#3a0d0a", "#6b1913", "#9e241c", "#c92e25", "#e2352b", "#ff7a6e", "#ffb1a8", "#ffe1dd"] },
+      "plane-open": { "role": "primary", "displayName": "Amarelo Noigandres", "canonical": "#f2c230", "tonalRamp": ["#3d2f05", "#6b520a", "#997610", "#c99b19", "#f2c230", "#f7d466", "#fbe59c", "#fdf4d6"] },
+      "plane-in": { "role": "primary", "displayName": "Azul Concreto", "canonical": "#2f5bd3", "tonalRamp": ["#0b1739", "#142a68", "#1e3e97", "#2750c0", "#2f5bd3", "#93abff", "#bfcdff", "#e5ebff"] },
+      "ink-out": { "role": "secondary", "displayName": "Vermelho Text Ink", "canonical": "#ff7a6e", "tonalRamp": ["#3a0d0a", "#6b1913", "#9e241c", "#e2352b", "#ff7a6e", "#ff9d93", "#ffb1a8", "#ffe1dd"] },
+      "ink-open": { "role": "secondary", "displayName": "Amarelo Text Ink", "canonical": "#f2c230", "tonalRamp": ["#3d2f05", "#6b520a", "#997610", "#c99b19", "#f2c230", "#f7d466", "#fbe59c", "#fdf4d6"] },
+      "ink-in": { "role": "secondary", "displayName": "Azul Text Ink", "canonical": "#93abff", "tonalRamp": ["#0b1739", "#142a68", "#1e3e97", "#2f5bd3", "#93abff", "#aabdff", "#bfcdff", "#e5ebff"] },
+      "on-plane-light": { "role": "neutral", "displayName": "White on Plane", "canonical": "#ffffff", "tonalRamp": ["#141414", "#3a3a37", "#6e6e69", "#a3a39e", "#cfcfcb", "#ebebe8", "#f7f7f5", "#ffffff"] }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "Page titles in PageHeader." },
-      "title": { "displayName": "Title", "purpose": "Card titles and dialog titles." },
-      "body": { "displayName": "Body", "purpose": "List text, card content and form fields." },
-      "label": { "displayName": "Label", "purpose": "Helper text, captions and badge text." }
+      "display": { "displayName": "Display", "purpose": "The single answer amount (sobra/falta) on Dashboard and Movimentos." },
+      "headline": { "displayName": "Headline", "purpose": "Lowercase page titles, wordmark and section headings." },
+      "body": { "displayName": "Body", "purpose": "Meta lines, legend labels, nav and all other content." },
+      "body-strong": { "displayName": "Body Strong", "purpose": "Ledger titles, amounts, day-tile numerals, active nav." },
+      "label": { "displayName": "Tab Label", "purpose": "Mobile tab-bar labels only; chrome exception." }
     },
-    "shadows": [
-      { "name": "card-dark", "value": "0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.2)", "purpose": "Resting shadow of a card in the shipped dark theme (shadow-lg with shadow-black/20)." },
-      { "name": "button-rest", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Filled button at rest (shadow-md)." },
-      { "name": "floating", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "Hover on filled buttons, and dialog or sheet surfaces (shadow-lg)." },
-      { "name": "control-rest", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "Outline buttons and inputs (shadow-sm)." }
-    ],
+    "shadows": [],
     "motion": [
-      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for color and shadow transitions." },
-      { "name": "duration-control", "value": "150ms", "purpose": "Color and shadow transitions on controls." },
-      { "name": "duration-dialog", "value": "200ms", "purpose": "Dialog and sheet open and close." }
+      { "name": "plane-replan", "value": "flex-grow 420ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Plane bar segments resizing when the month replans (paid toggle, filter, month change). Only under prefers-reduced-motion: no-preference." },
+      { "name": "plane-dim", "value": "opacity 200ms ease-out", "purpose": "Dimming non-selected plane segments to 25% when a status filter is active." },
+      { "name": "press", "value": "transform scale(0.98) / scale(0.95)", "purpose": "Press feedback on primary buttons and the + tab." }
     ],
     "breakpoints": [
-      { "name": "sm", "value": "640px", "purpose": "Two-column grids; dialog corner radius." },
-      { "name": "md", "value": "768px", "purpose": "Desktop sidebar appears and main content offsets." },
-      { "name": "lg", "value": "1024px", "purpose": "Three to five column summary grids." },
-      { "name": "xl", "value": "1280px" }
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" }
     ]
   },
   "components": [
     {
+      "name": "Month Plane Bar",
+      "kind": "custom",
+      "refersTo": "month-plane-bar",
+      "description": "Signature: the month as flat planes whose widths are the amounts, with a two-column filtering legend.",
+      "html": "<div class=\"ds-plane\"><div class=\"ds-plane-bar\"><button class=\"ds-seg ds-seg-out\" style=\"flex-grow:1185\" aria-label=\"pago\"></button><button class=\"ds-seg ds-seg-open\" style=\"flex-grow:4215\" aria-label=\"em aberto\"></button><button class=\"ds-seg ds-seg-forecast\" style=\"flex-grow:1169\" aria-label=\"previsto\"></button><button class=\"ds-seg ds-seg-in\" style=\"flex-grow:2663\" aria-label=\"sobra\"></button></div><ul class=\"ds-legend\"><li><button class=\"ds-legend-item\"><span class=\"ds-mk ds-seg-out\"></span><span class=\"ds-lbl\">pago</span><span class=\"ds-amt\">1.185,04</span></button></li><li><button class=\"ds-legend-item\"><span class=\"ds-mk ds-seg-open\"></span><span class=\"ds-lbl\">em aberto</span><span class=\"ds-amt\">4.215,89</span></button></li><li><button class=\"ds-legend-item\"><span class=\"ds-mk ds-seg-forecast\"></span><span class=\"ds-lbl\">previsto</span><span class=\"ds-amt\">1.169,73</span></button></li><li><button class=\"ds-legend-item\"><span class=\"ds-mk ds-seg-in\"></span><span class=\"ds-lbl\">sobra</span></button></li></ul></div>",
+      "css": ".ds-plane { font-family: var(--font-jost), Jost, system-ui, sans-serif; font-feature-settings: \"tnum\" 1; color: #ebebe8; background: #141414; padding: 16px; } .ds-plane-bar { display: flex; gap: 3px; height: 64px; } .ds-seg { flex-basis: 0; min-width: 6px; height: 100%; border: 0; padding: 0; border-radius: 0; cursor: pointer; transition: flex-grow 420ms cubic-bezier(0.16,1,0.3,1), opacity 200ms ease-out; } .ds-seg:hover { filter: brightness(1.1); } .ds-seg-out { background: #e2352b; } .ds-seg-open { background: #f2c230; } .ds-seg-forecast { background: transparent; box-shadow: inset 0 0 0 2px #e2352b; } .ds-seg-in { background: #2f5bd3; } .ds-legend { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 4px; } .ds-legend-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px; margin: 0 -6px; background: transparent; border: 0; border-radius: 0; color: inherit; font: inherit; font-size: 15px; cursor: pointer; } .ds-legend-item:hover { background: #262625; } .ds-legend-item:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; } .ds-mk { width: 10px; height: 10px; flex-shrink: 0; } .ds-lbl { color: #a3a39e; } .ds-amt { margin-left: auto; font-weight: 500; }"
+    },
+    {
+      "name": "Deficit Plane (falta)",
+      "kind": "custom",
+      "refersTo": "month-plane-bar",
+      "description": "Deficit state: striped ground overlay with a 2px ink edge covering the uncovered share of spending.",
+      "html": "<div class=\"ds-def\"><div class=\"ds-def-bar\"><div class=\"ds-def-seg\" style=\"flex-grow:3;background:#e2352b\"></div><div class=\"ds-def-seg\" style=\"flex-grow:2;background:#f2c230\"></div><div class=\"ds-def-over\" style=\"width:28%\"></div></div><p class=\"ds-def-lbl\"><span class=\"ds-def-mk\"></span>falta</p></div>",
+      "css": ".ds-def { font-family: var(--font-jost), Jost, system-ui, sans-serif; background: #141414; color: #a3a39e; padding: 16px; } .ds-def-bar { position: relative; display: flex; gap: 3px; height: 64px; } .ds-def-seg { flex-basis: 0; height: 100%; } .ds-def-over { position: absolute; top: 0; bottom: 0; right: 0; border-left: 2px solid #ebebe8; background: repeating-linear-gradient(135deg, #141414 0 3px, transparent 3px 9px); pointer-events: none; } .ds-def-lbl { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 15px; } .ds-def-mk { width: 10px; height: 10px; background: repeating-linear-gradient(135deg, #e2352b 0 2px, transparent 2px 5px); }"
+    },
+    {
+      "name": "Ledger Row with Day Tile and Paid Check",
+      "kind": "custom",
+      "refersTo": "ledger-row",
+      "description": "Dated row: square day tile in the plane tone, title and meta, signed ink amount, paid check.",
+      "html": "<div class=\"ds-ledger\"><div class=\"ds-row\"><button class=\"ds-row-open\"><span class=\"ds-tile ds-tile-open\">7</span><span class=\"ds-row-txt\"><span class=\"ds-row-title\">Fatura Inter Platinum Black</span><span class=\"ds-row-meta ds-due\">em aberto · 2 compras</span></span><span class=\"ds-row-amt\">−600,00</span></button><label class=\"ds-check-hit\"><input type=\"checkbox\" class=\"ds-check\" aria-label=\"Marcar como pago\"></label></div><div class=\"ds-row\"><button class=\"ds-row-open\"><span class=\"ds-tile ds-tile-later\">22</span><span class=\"ds-row-txt\"><span class=\"ds-row-title\">Compra carro</span><span class=\"ds-row-meta\">em 5 dias · Conta corrente</span></span><span class=\"ds-row-amt\">−1.250,00</span></button><label class=\"ds-check-hit\"><input type=\"checkbox\" class=\"ds-check\" checked aria-label=\"Desmarcar como pago\"></label></div></div>",
+      "css": ".ds-ledger { font-family: var(--font-jost), Jost, system-ui, sans-serif; font-feature-settings: \"tnum\" 1; background: #141414; color: #ebebe8; padding: 0 16px; } .ds-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid #2c2c2a; } .ds-row:first-child { border-top: 0; } .ds-row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 4px 0; margin: -4px 0; background: transparent; border: 0; border-radius: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color 150ms; } .ds-row-open:hover { background: rgba(38,38,37,0.6); } .ds-row-open:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; } .ds-tile { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; font-size: 15px; font-weight: 700; line-height: 1; box-sizing: border-box; } .ds-tile-open { background: #f2c230; color: #141414; } .ds-tile-later { border: 2px solid #f2c230; color: #ebebe8; } .ds-row-txt { flex: 1; min-width: 0; } .ds-row-title, .ds-row-meta { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; line-height: 1.375; } .ds-row-title { font-weight: 500; } .ds-row-meta { color: #a3a39e; } .ds-due { color: #f2c230; } .ds-row-amt { flex-shrink: 0; font-size: 15px; font-weight: 500; } .ds-check-hit { display: grid; place-items: center; width: 44px; height: 44px; margin: -8px; cursor: pointer; } .ds-check { appearance: none; width: 24px; height: 24px; margin: 0; border: 2px solid #ebebe8; border-radius: 0; background: transparent; cursor: pointer; display: grid; place-content: center; } .ds-check:checked { border-color: #e2352b; background: #e2352b url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E\") center/16px no-repeat; } .ds-check:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
+    },
+    {
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Main action in a view. Filled Ledger Blue; one per view.",
-      "html": "<button class='ds-btn-primary'>Salvar</button>",
-      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:8px 16px;border:0;border-radius:6px;background:var(--primary,#3b82f6);color:var(--primary-foreground,#ffffff);font:500 14px/20px Geist,system-ui,sans-serif;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1),0 2px 4px -2px rgb(0 0 0 / 0.1);cursor:pointer;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1),box-shadow 150ms cubic-bezier(0.4,0,0.2,1),transform 150ms cubic-bezier(0.4,0,0.2,1)} .ds-btn-primary:hover{background:color-mix(in srgb,var(--primary,#3b82f6) 90%,transparent);box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1),0 4px 6px -4px rgb(0 0 0 / 0.1)} .ds-btn-primary:active{transform:scale(0.98)} .ds-btn-primary:focus-visible{outline:none;box-shadow:0 0 0 1px var(--ring,#60a5fa)}"
+      "description": "Square ink slab with ground text; nova compra in the sidebar, form submits.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>nova compra</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; background: #ebebe8; color: #141414; border: 0; border-radius: 0; font-family: var(--font-jost), Jost, system-ui, sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 150ms, transform 100ms; } .ds-btn-primary:hover { background: rgba(235,235,232,0.9); } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
     },
     {
-      "name": "Outline Button",
+      "name": "Ghost and Outline Buttons",
       "kind": "button",
-      "refersTo": "button-outline",
-      "description": "Secondary action beside a primary one, such as Cancelar.",
-      "html": "<button class='ds-btn-outline'>Cancelar</button>",
-      "css": ".ds-btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:8px 16px;border:1px solid var(--border,#2d3a4f);border-radius:6px;background:var(--background,#0c1222);color:var(--foreground,#e2e8f0);font:500 14px/20px Geist,system-ui,sans-serif;box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);cursor:pointer;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1)} .ds-btn-outline:hover{background:var(--secondary,#2d3a4f)} .ds-btn-outline:focus-visible{outline:none;box-shadow:0 0 0 1px var(--ring,#60a5fa)}"
+      "refersTo": "button-ghost",
+      "description": "Ghost for the month switcher and sair; outline for secondary actions in sheets.",
+      "html": "<div class=\"ds-btn-row\"><button class=\"ds-btn-ghost ds-btn-icon\" aria-label=\"Mês anterior\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"m15 18-6-6 6-6\"/></svg></button><span class=\"ds-month\">novembro 2026</span><button class=\"ds-btn-ghost ds-btn-icon\" aria-label=\"Próximo mês\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"/></svg></button><button class=\"ds-btn-outline\">sair</button></div>",
+      "css": ".ds-btn-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-jost), Jost, system-ui, sans-serif; color: #ebebe8; background: #141414; padding: 12px; } .ds-month { min-width: 7.5rem; text-align: center; font-size: 15px; font-weight: 500; } .ds-btn-ghost, .ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 0; color: #ebebe8; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 150ms; } .ds-btn-ghost { background: transparent; border: 0; } .ds-btn-icon { width: 40px; height: 40px; padding: 0; } .ds-btn-outline { background: #141414; border: 1px solid #3a3a37; margin-left: auto; } .ds-btn-ghost:hover, .ds-btn-outline:hover { background: #262625; } .ds-btn-ghost:focus-visible, .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
     },
     {
-      "name": "Input",
+      "name": "Text Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "Text and amount field. Transparent background, 1px border, Focus Sky ring.",
-      "html": "<input class='ds-input' placeholder='Descrição' />",
-      "css": ".ds-input{box-sizing:border-box;width:100%;height:36px;padding:4px 12px;border:1px solid var(--border,#2d3a4f);border-radius:6px;background:transparent;color:var(--foreground,#e2e8f0);font:400 14px/20px Geist,system-ui,sans-serif;box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);transition:box-shadow 150ms cubic-bezier(0.4,0,0.2,1)} .ds-input::placeholder{color:var(--muted-foreground,#94a3b8)} .ds-input:focus-visible{outline:none;box-shadow:0 0 0 1px var(--ring,#60a5fa)}"
+      "description": "Square transparent field with a strong-rule border and amarelo focus ring.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-lbl\">descrição</span><input class=\"ds-input\" placeholder=\"mercado\"></label>",
+      "css": ".ds-field { display: grid; gap: 8px; font-family: var(--font-jost), Jost, system-ui, sans-serif; background: #141414; color: #ebebe8; padding: 16px; } .ds-field-lbl { font-size: 15px; font-weight: 500; } .ds-input { height: 36px; padding: 4px 12px; background: transparent; color: #ebebe8; border: 1px solid #3a3a37; border-radius: 0; font: inherit; font-size: 15px; caret-color: #f2c230; transition: box-shadow 150ms; } .ds-input::placeholder { color: #a3a39e; } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
     },
     {
-      "name": "Card",
-      "kind": "card",
-      "refersTo": "card",
-      "description": "Container for a group of related figures, with a title and a muted description.",
-      "html": "<div class='ds-card'><div class='ds-card-title'>Saldos</div><p class='ds-card-desc'>Conta corrente e caixinhas</p></div>",
-      "css": ".ds-card{box-sizing:border-box;padding:24px;border:1px solid var(--border,#2d3a4f);border-radius:12px;background:var(--surface,#151d2e);color:var(--foreground,#e2e8f0);box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.2),0 4px 6px -4px rgb(0 0 0 / 0.2);font-family:Geist,system-ui,sans-serif} .ds-card-title{font:600 18px/1 Geist,system-ui,sans-serif;letter-spacing:-0.025em} .ds-card-desc{margin:8px 0 0;font:400 14px/20px Geist,system-ui,sans-serif;color:var(--muted-foreground,#94a3b8)}"
-    },
-    {
-      "name": "Negative Badge",
-      "kind": "chip",
-      "refersTo": "badge-destructive",
-      "description": "Flags a negative balance next to its figure. Always pairs the color with the word.",
-      "html": "<span class='ds-badge-negative'>Negativo</span>",
-      "css": ".ds-badge-negative{display:inline-flex;align-items:center;gap:2px;padding:2px 10px;border-radius:6px;background:var(--destructive,#ef4444);color:var(--destructive-foreground,#ffffff);font:600 12px/16px Geist,system-ui,sans-serif;white-space:nowrap}"
-    },
-    {
-      "name": "Navigation Item",
+      "name": "Mobile Tab Bar",
       "kind": "nav",
-      "description": "Sidebar link. Active item gets a blue tint and blue text; inactive items use gray text.",
-      "html": "<a class='ds-nav-item ds-nav-item-active' href='#'>Movimentos do mês</a> <a class='ds-nav-item' href='#'>Cartões</a>",
-      "css": ".ds-nav-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;font:400 14px/20px Geist,system-ui,sans-serif;color:#d1d5db;text-decoration:none;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1)} .ds-nav-item:hover{background:#1f2937} .ds-nav-item-active{background:rgb(30 58 138 / 0.3);color:#60a5fa}"
+      "refersTo": "tab-bar-item",
+      "description": "Five-cell bottom bar with a raised square ink + for nova compra; active cell in ink with a 2px bar.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Navegação principal\"><a class=\"ds-tab is-active\" href=\"#\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/></svg><span>início</span><i></i></a><a class=\"ds-tab\" href=\"#\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"18\"/><path d=\"M16 2v4M8 2v4M3 10h18\"/></svg><span>movimentos</span><i></i></a><div class=\"ds-tab-plus-cell\"><a class=\"ds-tab-plus\" href=\"#\" aria-label=\"Nova compra\"><svg width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg></a></div><a class=\"ds-tab\" href=\"#\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z\"/><path d=\"M8 8h8M8 12h8M8 16h5\"/></svg><span>compras</span><i></i></a><button class=\"ds-tab\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M4 6h16M4 12h16M4 18h16\"/></svg><span>mais</span><i></i></button></nav>",
+      "css": ".ds-tabs { display: flex; align-items: flex-end; margin-top: 24px; border-top: 1px solid #2c2c2a; background: #141414; font-family: var(--font-jost), Jost, system-ui, sans-serif; } .ds-tab { flex: 1; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #a3a39e; font-size: 12px; text-transform: lowercase; text-decoration: none; background: transparent; border: 0; font-family: inherit; cursor: pointer; } .ds-tab i { display: block; width: 20px; height: 2px; background: transparent; } .ds-tab.is-active { color: #ebebe8; } .ds-tab.is-active span { font-weight: 500; } .ds-tab.is-active i { background: #ebebe8; } .ds-tab:hover { color: #ebebe8; } .ds-tab:focus-visible { outline: none; box-shadow: inset 0 0 0 1px #f2c230; } .ds-tab-plus-cell { flex: 1; display: flex; justify-content: center; } .ds-tab-plus { display: grid; place-items: center; width: 56px; height: 56px; margin: -20px 0 8px; background: #ebebe8; color: #141414; border-radius: 0; transition: transform 100ms; } .ds-tab-plus:active { transform: scale(0.95); } .ds-tab-plus:focus-visible { outline: 2px solid #f2c230; outline-offset: 2px; }"
     },
     {
-      "name": "Progress Bar",
-      "kind": "custom",
-      "description": "Thin fully rounded bar. Track is Ledger Blue at 20%; fill is Ledger Blue.",
-      "html": "<div class='ds-progress' role='progressbar' aria-valuenow='60' aria-valuemin='0' aria-valuemax='100'><div class='ds-progress-bar' style='width:60%'></div></div>",
-      "css": ".ds-progress{position:relative;height:8px;width:100%;overflow:hidden;border-radius:9999px;background:color-mix(in srgb,var(--primary,#3b82f6) 20%,transparent)} .ds-progress-bar{height:100%;background:var(--primary,#3b82f6);transition:width 150ms cubic-bezier(0.4,0,0.2,1)}"
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Desktop sidebar list; active item is an inverted ink slab.",
+      "html": "<nav class=\"ds-side\" aria-label=\"Navegação\"><a class=\"ds-side-item is-active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/></svg>início</a><a class=\"ds-side-item\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/><path d=\"M22 12A10 10 0 0 0 12 2v10z\"/></svg>orçamento</a><a class=\"ds-side-item\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M17 2l4 4-4 4\"/><path d=\"M3 11v-1a4 4 0 0 1 4-4h14\"/><path d=\"M7 22l-4-4 4-4\"/><path d=\"M21 13v1a4 4 0 0 1-4 4H3\"/></svg>recorrentes</a></nav>",
+      "css": ".ds-side { width: 216px; padding: 12px; background: #141414; display: grid; gap: 1px; font-family: var(--font-jost), Jost, system-ui, sans-serif; } .ds-side-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; font-size: 15px; color: #a3a39e; text-decoration: none; border-radius: 0; transition: background-color 150ms, color 150ms; } .ds-side-item:hover { background: #262625; color: #ebebe8; } .ds-side-item.is-active { background: #ebebe8; color: #141414; font-weight: 500; } .ds-side-item:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
     },
     {
-      "name": "Money Figure",
-      "kind": "custom",
-      "description": "Signature amount. Tabular figures, colored by direction. Pair with a sign or word.",
-      "html": "<span class='ds-money ds-money-in'>+ R$ 1.250,00</span> <span class='ds-money ds-money-out'>- R$ 480,00</span> <span class='ds-money ds-money-negative'>- R$ 35,10</span>",
-      "css": ".ds-money{font-weight:600;font-variant-numeric:tabular-nums;font-family:Geist,system-ui,sans-serif} .ds-money-in{color:#4ade80} .ds-money-out{color:#f87171} .ds-money-negative{color:var(--destructive,#ef4444)}"
+      "name": "Segmented Toggle",
+      "kind": "chip",
+      "refersTo": "segmented-toggle-on",
+      "description": "Square view switch (por fonte / por data); selected segment inverts to ink.",
+      "html": "<div class=\"ds-seg-group\" role=\"group\"><button class=\"ds-seg-btn is-on\" aria-pressed=\"true\">por fonte</button><button class=\"ds-seg-btn\" aria-pressed=\"false\">por data</button></div>",
+      "css": ".ds-seg-group { display: inline-flex; padding: 12px; background: #141414; font-family: var(--font-jost), Jost, system-ui, sans-serif; } .ds-seg-btn { height: 32px; padding: 0 12px; border: 1px solid #3a3a37; border-radius: 0; background: transparent; color: #ebebe8; font: inherit; font-size: 15px; cursor: pointer; transition: background-color 150ms; } .ds-seg-btn + .ds-seg-btn { border-left: 0; } .ds-seg-btn:hover { background: #262625; } .ds-seg-btn.is-on { background: #ebebe8; color: #141414; border-color: #ebebe8; } .ds-seg-btn:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
     }
   ],
   "narrative": {
-    "northStar": "The Household Ledger",
-    "overview": "G&M Finance is a shared cashbook for two people. The screen should feel like the ledger kept on the kitchen table: exact, unhurried, and out of the way of the numbers. Dark surfaces are the shipped default, so the app stays quiet at night. The blue primary appears only where someone needs to act.\n\nDensity is comfortable-to-dense. Small type carries most of the content, many rows fit on one screen, and cards keep generous padding. Hierarchy comes from size and weight, not color. Money is the hero, so amounts are set in tabular figures and colored by direction.\n\nRejected, confirmed by the user: gradients, glassmorphism, neon accents, a cold and formal bank-portal look, and playful mascots or emoji-heavy copy.",
+    "northStar": "Concreto",
+    "overview": "The month is a concrete composition. Money is drawn as flat planes whose widths are the amounts, on a near-black ground, in the manner of Brazilian concrete art (Grupo Ruptura, Noigandres). Three pigments do all the work: red for money that went out, yellow for what is open or due, blue for money in and what is left. Everything else is off-white ink, 1px rules, and square corners. The screen reads as a few heavy shapes plus a quiet list; there are no metric cards and no grid of equal stat tiles.\n\nDensity is operational and phone-first. One number answers \"quanto sobra\", one bar shows how the month splits, and dated rows carry the work of ticking things paid. Type is lowercase Jost with tabular figures, ranked by weight more than by size: three sizes cover almost everything. Text is kept to the minimum; a value is labelled once, by its legend or its heading, never twice.\n\nColour is structural, not decorative. It lives in planes, day tiles, legend markers and the paid check. Amounts stay in ink and carry their sign; the colour beside them already says what they are.",
     "keyCharacteristics": [
-      "Dark-first: the app ships with html class dark",
-      "One blue accent; the money-status colors carry direction, not decoration",
-      "Flat at rest; shadows only on cards, buttons, and floating layers",
-      "Small type with tabular figures on every amount",
-      "6px controls, 12px cards"
+      "Near-black ground (#141414) with off-white ink (#ebebe8); dark is the shipped default.",
+      "Three flat pigments used only as planes and markers: vermelho, amarelo, azul.",
+      "Square corners everywhere (all radii 0px); flat surfaces, separation by 1px rules.",
+      "Lowercase bold Jost headings, tabular figures globally.",
+      "The month plane bar is the signature: width equals value, tappable to filter."
     ],
     "rules": [
-      { "name": "The Direction Rule", "body": "Green means money in, red means money out, amber means pending or needs attention. These hues never decorate.", "section": "colors" },
-      { "name": "The Tabular Figures Rule", "body": "Every amount uses tabular-nums so money columns align. Never set an amount in proportional digits.", "section": "typography" },
-      { "name": "The Flat-At-Rest Rule", "body": "Rows, list items, and page sections are flat. A shadow means the element can be acted on or floats above the page.", "section": "elevation" }
+      { "name": "The Planes Carry Colour Rule", "body": "Pigment appears as filled or outlined shapes (planes, tiles, markers, checks). Amounts are set in ink with a sign (− for out, + for in); only a deficit or a due-today line moves into a text ink.", "section": "colors" },
+      { "name": "The Three Pigments Rule", "body": "Red, yellow, blue, each with one meaning everywhere: out/paid, open/due, in/left. No fourth hue, no smooth gradients, no tints used as backgrounds; the only patterned fill is the deficit stripe.", "section": "colors" },
+      { "name": "The Three Sizes Rule", "body": "Content uses 48, 24 and 15px, ranked by weight. A new size needs a reason the existing three cannot carry.", "section": "typography" },
+      { "name": "The Lowercase Rule", "body": "Headings, nav and tab labels are lowercase. No uppercase, no letter-spaced labels above headings.", "section": "typography" },
+      { "name": "The Said Once Rule", "body": "A value is labelled once: by its section heading, its legend entry, or its meta line. No caption repeating the heading, no explanatory paragraph under a number.", "section": "typography" },
+      { "name": "The Slab Rule", "body": "Surfaces are flat at rest and in every state. Hover is a tonal step or a brightness lift on a plane, never a shadow or a lift.", "section": "elevation" }
     ],
     "dos": [
-      "Do use Ledger Blue (primary) for one main action per view.",
-      "Do set every amount with tabular-nums and color it by direction: green for in, red for out, Overdraft Red for negative balances.",
-      "Do pair color with a word or a sign: Negativo, Em aberto, or a leading minus.",
-      "Do keep depth flat at rest. Add shadow only to cards, buttons, and floating layers.",
-      "Do keep controls 36px tall with 6px corners, and cards 12px."
+      "Do show money as planes whose width is the amount; the month plane bar is the first thing under the answer number on Dashboard and Movimentos.",
+      "Do set every amount in ink with its sign (−1.250,00, +9.234,44) and let the tile, marker or plane beside it carry the colour.",
+      "Do keep each pigment to its one meaning: vermelho out/paid, amarelo open/due, azul in/left.",
+      "Do use 0px corners on every new surface, 1px rules to separate and 2px outlines to encode state.",
+      "Do keep content type to 48, 24 and 15px with lowercase bold headings and tabular figures.",
+      "Do show a deficit as the striped \"falta\" overlay and turn only the display amount to the red text ink.",
+      "Do use the 1px amarelo focus ring on every interactive element."
     ],
     "donts": [
-      "Don't use gradients, glassmorphism, or neon accents.",
-      "Don't make it look like a cold, formal bank portal, with dense legal-style chrome or intimidating layouts.",
-      "Don't use mascots, bright playful gradients, or emoji-heavy copy.",
-      "Don't introduce a second accent hue. The blue primary and the three money colors are the palette.",
-      "Don't add new gray-* surfaces to screens. Use the tokens and fold drift into them.",
-      "Don't use the money-direction colors for decoration."
+      "Don't build a big balance card plus a grid of same-size stat tiles; that is the fintech default this world refuses.",
+      "Don't colour amounts green/red or fill text with the pigment hexes; use ink, or the text inks when state must sit in text.",
+      "Don't label a value twice or add explanatory copy under numbers and headings.",
+      "Don't add shadows, rounded corners, smooth gradients or tinted backgrounds; hard 135° stripes are reserved for the deficit.",
+      "Don't add uppercase or letter-spaced labels above headings.",
+      "Don't introduce a fourth hue for categories, tags or status."
     ]
   }
 }

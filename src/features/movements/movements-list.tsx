@@ -1,27 +1,27 @@
 "use client";
 
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Calendar,
-  AlertTriangle,
-  CalendarCheck,
-  CheckCircle2,
-  Clock,
-  Landmark,
-  WalletCards,
-  Wallet,
-  PiggyBank,
-  ChevronLeft,
-  ChevronRight,
-  Layers,
-} from "lucide-react";
-import { differenceInCalendarDays, format } from "date-fns";
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { Check, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { CardStatementFundingModal } from "@/features/cards/card-statement-funding-modal";
+import { DayTile, LedgerRow, MonthSwitcher, PaidCheck, type TileTone } from "@/features/month/ledger";
+import {
+  computeMonthTotals,
+  currentMonthParam,
+  dayOfMonth,
+  daysFromToday,
+  dueWord,
+  effectiveDate,
+  formatAmount,
+  monthName,
+  rowStatus,
+  shiftMonth,
+  todayYmd,
+  type MonthStatus,
+} from "@/features/month/month-model";
+import { MonthPlane } from "@/features/month/month-plane";
 import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
 import {
   useMonthMovements,
@@ -30,247 +30,33 @@ import {
   type MonthMovementRow,
 } from "@/shared/hooks/use-app-data";
 import { cn } from "@/shared/lib/cn";
-import { formatCurrency, formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
+import { formatDisplayDate, formatYearMonthLabel } from "@/shared/utils/formatters";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/shared/ui/accordion";
-import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { Checkbox } from "@/shared/ui/checkbox";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
-import { Label } from "@/shared/ui/label";
-import { SelectOptions } from "@/shared/ui/select-options";
+import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
 
-const currentMonthParam = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+type ViewMode = "source" | "date";
+
+const STATUS_LABEL: Record<MonthStatus, string> = {
+  pago: "pago",
+  aberto: "em aberto",
+  previsto: "previsto",
+  entradas: "entradas",
 };
-
-function addMonths(ym: string, delta: number): string {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function localDayFromYmd(ymd: string): Date {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** Status relativo ao dia de hoje (só no mês corrente na tela): futuro, hoje, ontem ou antes. */
-type CalendarRelativeStatus =
-  | { kind: "today" }
-  | { kind: "dueToday" }
-  | { kind: "upcoming"; daysLeft: number; scope?: "purchase" | "due" }
-  | { kind: "yesterday" }
-  | { kind: "earlier" };
-
-function calendarRelativeStatus(
-  isCurrentMonth: boolean,
-  itemDate: string,
-  todayStr: string,
-): CalendarRelativeStatus | null {
-  if (!isCurrentMonth) return null;
-  const diff = differenceInCalendarDays(localDayFromYmd(itemDate), localDayFromYmd(todayStr));
-  if (diff > 0) return { kind: "upcoming", daysLeft: diff };
-  if (diff === 0) return { kind: "today" };
-  if (diff === -1) return { kind: "yesterday" };
-  return { kind: "earlier" };
-}
-
-/**
- * Cartão: o compromisso só conta como “pago” depois do dia do vencimento da fatura.
- * Contagem e “já pago” usam `dueDate`; sem vencimento calculado, cai na data da compra.
- */
-function cardExpenseRelativeStatus(
-  isCurrentMonth: boolean,
-  dueDate: string,
-  todayStr: string,
-): CalendarRelativeStatus | null {
-  if (!isCurrentMonth) return null;
-  const untilDue = differenceInCalendarDays(localDayFromYmd(dueDate), localDayFromYmd(todayStr));
-  if (untilDue > 0) {
-    return { kind: "upcoming", daysLeft: untilDue, scope: "due" };
-  }
-  if (untilDue === 0) {
-    return { kind: "dueToday" };
-  }
-  const daysAfterDue = differenceInCalendarDays(localDayFromYmd(todayStr), localDayFromYmd(dueDate));
-  if (daysAfterDue === 1) {
-    return { kind: "earlier" };
-  }
-  if (daysAfterDue === 2) {
-    return { kind: "yesterday" };
-  }
-  return { kind: "earlier" };
-}
-
-function outgoingExpenseCalendarStatus(
-  item: MonthMovementRow,
-  isCurrentMonth: boolean,
-  todayStr: string,
-): CalendarRelativeStatus | null {
-  if (item.sourceType === "card" && item.dueDate) {
-    return cardExpenseRelativeStatus(isCurrentMonth, item.dueDate, todayStr);
-  }
-  return calendarRelativeStatus(isCurrentMonth, item.date, todayStr);
-}
-
-/** Entrada prevista (recorrente): só hoje ou dias à frente; datas passadas no mês ficam só “Previsto”. */
-function futureIncomingRelativeStatus(
-  isCurrentMonth: boolean,
-  itemDate: string,
-  todayStr: string,
-): null | { kind: "today" } | { kind: "upcoming"; daysLeft: number } {
-  if (!isCurrentMonth) return null;
-  const diff = differenceInCalendarDays(localDayFromYmd(itemDate), localDayFromYmd(todayStr));
-  if (diff > 0) return { kind: "upcoming", daysLeft: diff };
-  if (diff === 0) return { kind: "today" };
-  return null;
-}
-
-function ExpenseDateBadges({ status }: { status: CalendarRelativeStatus | null }) {
-  if (!status) return null;
-  if (status.kind === "dueToday") {
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-violet-500/70 bg-violet-50 font-normal text-violet-950 dark:border-violet-600/55 dark:bg-violet-950/35 dark:text-violet-100"
-      >
-        <Calendar className="h-3 w-3 shrink-0" aria-hidden />
-        Vence hoje
-      </Badge>
-    );
-  }
-  if (status.kind === "today") {
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-sky-500/70 bg-sky-50 font-normal text-sky-950 dark:border-sky-600/55 dark:bg-sky-950/35 dark:text-sky-100"
-      >
-        <CalendarCheck className="h-3 w-3 shrink-0" aria-hidden />
-        Pagamento hoje
-      </Badge>
-    );
-  }
-  if (status.kind === "upcoming") {
-    const toDue = status.scope === "due";
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-amber-500/70 bg-amber-50 font-normal text-amber-950 dark:border-amber-600/55 dark:bg-amber-950/35 dark:text-amber-100"
-      >
-        <Clock className="h-3 w-3 shrink-0" aria-hidden />
-        {toDue
-          ? status.daysLeft === 1
-            ? "Falta 1 dia para o vencimento"
-            : `Faltam ${status.daysLeft} dias para o vencimento`
-          : status.daysLeft === 1
-            ? "Falta 1 dia"
-            : `Faltam ${status.daysLeft} dias`}
-      </Badge>
-    );
-  }
-  if (status.kind === "yesterday") {
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-emerald-600/50 bg-emerald-50 font-normal text-emerald-950 dark:border-emerald-600/45 dark:bg-emerald-950/35 dark:text-emerald-100"
-      >
-        <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-        Foi pago ontem
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="gap-1 border-emerald-600/45 bg-emerald-50/90 font-normal text-emerald-950 dark:border-emerald-600/40 dark:bg-emerald-950/30 dark:text-emerald-100"
-    >
-      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-      Já pago
-    </Badge>
-  );
-}
-
-function IncomeDateBadges({ status }: { status: CalendarRelativeStatus | null }) {
-  if (!status) return null;
-  if (status.kind === "dueToday") return null;
-  if (status.kind === "today") {
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-green-600/60 bg-green-100/90 font-normal text-green-950 dark:border-green-600/45 dark:bg-green-950/40 dark:text-green-100"
-      >
-        <CalendarCheck className="h-3 w-3 shrink-0" aria-hidden />
-        Entrada hoje
-      </Badge>
-    );
-  }
-  if (status.kind === "upcoming") {
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-amber-500/70 bg-amber-50 font-normal text-amber-950 dark:border-amber-600/55 dark:bg-amber-950/35 dark:text-amber-100"
-      >
-        <Clock className="h-3 w-3 shrink-0" aria-hidden />
-        {status.daysLeft === 1 ? "Entra em 1 dia" : `Entra em ${status.daysLeft} dias`}
-      </Badge>
-    );
-  }
-  if (status.kind === "yesterday") {
-    return (
-      <Badge
-        variant="outline"
-        className="gap-1 border-green-600/50 bg-green-50 font-normal text-green-950 dark:border-green-600/45 dark:bg-green-950/35 dark:text-green-100"
-      >
-        <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-        Entrou ontem
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="gap-1 border-green-600/45 bg-green-50/90 font-normal text-green-950 dark:border-green-600/40 dark:bg-green-950/30 dark:text-green-100"
-    >
-      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-      Já entrou
-    </Badge>
-  );
-}
-
-function groupMovements(list: MonthMovementRow[] | undefined) {
-  if (!list) {
-    return {
-      incoming: [] as MonthMovementRow[],
-      incomingFuture: [] as MonthMovementRow[],
-      outgoing: [] as MonthMovementRow[],
-      future: [] as MonthMovementRow[],
-    };
-  }
-  return {
-    incoming: list.filter((x) => x.type === "in"),
-    incomingFuture: list.filter((x) => x.type === "future_in"),
-    outgoing: list.filter((x) => x.type === "out"),
-    future: list.filter((x) => x.type === "future_out"),
-  };
-}
-
-type MovementsExpenseViewMode = "chronological" | "by_payment_source";
 
 const CHECKING_ACCOUNT_LABEL = "Conta corrente";
 
-type PaymentSourceGroup = {
+type SourceGroup = {
   key: string;
   label: string;
   sortOrder: number;
   sourceType?: MonthMovementRow["sourceType"];
-  /** Presente para cartão/caixinha quando o movimento tem `sourceId`. */
   sourceId?: string | null;
   items: MonthMovementRow[];
   subtotal: number;
 };
 
-function paymentSourceGroupKey(item: MonthMovementRow): string {
+function sourceGroupKey(item: MonthMovementRow): string {
   /** `""` não é nullish — sem `trim` gerava dois grupos “conta” vs `account`. */
   const t = (item.sourceType ?? "").trim();
   if (!t || t === "account") return "account";
@@ -278,1283 +64,454 @@ function paymentSourceGroupKey(item: MonthMovementRow): string {
   return `${t}:${item.source ?? item.id}`;
 }
 
-/** Remove valores em R$ do texto de destino para agrupar depósitos iguais com valores diferentes. */
-function stripCurrencyAmountsFromSourceLabel(s: string): string {
-  return s
-    .replace(/\s*R\$\s*[\d.\s\u00a0]+(?:,\d{2})?/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function incomingDestinationGroupKey(item: MonthMovementRow): string {
-  const raw = item.source?.trim() ?? "";
-  const normalized = stripCurrencyAmountsFromSourceLabel(raw).trim();
-  const L = normalized.toLowerCase();
-  /** Depósitos “Conta R$ …” viram só “Conta” após strip; unifica com “Conta corrente”. */
-  if (L === "conta" || L === "conta corrente") return CHECKING_ACCOUNT_LABEL;
-  return normalized || `sem-destino:${item.id}`;
-}
-
-function incomeGroupSortOrder(label: string): number {
-  const L = label.toLowerCase();
-  if (L === "conta corrente" || L === "conta") return 0;
-  if (L.includes("·") || L.includes(" · ")) return 2;
-  if (L.includes("caixinha")) return 1;
-  if (L.startsWith("conta ")) return 0;
-  return 3;
-}
-
-/** Agrupa entradas realizadas ou previstas pelo destino (conta / caixinha / divisão). */
-function groupIncomeByDestination(items: MonthMovementRow[]): PaymentSourceGroup[] {
+/** Agrupa saídas (realizadas e previstas) por conta, caixinha ou cartão. */
+function groupBySource(items: MonthMovementRow[]): SourceGroup[] {
   const map = new Map<string, MonthMovementRow[]>();
   for (const item of items) {
-    const k = incomingDestinationGroupKey(item);
-    const arr = map.get(k) ?? [];
-    arr.push(item);
-    map.set(k, arr);
+    const k = sourceGroupKey(item);
+    map.set(k, [...(map.get(k) ?? []), item]);
   }
-  const out: PaymentSourceGroup[] = [];
-  for (const [key, groupItems] of map) {
-    const first = groupItems[0]!;
-    const stripped = stripCurrencyAmountsFromSourceLabel(first.source ?? "").trim();
-    const label =
-      !stripped
-        ? "Outros"
-        : stripped.toLowerCase() === "conta" || stripped.toLowerCase() === "conta corrente"
-          ? CHECKING_ACCOUNT_LABEL
-          : stripped;
-    const sortOrder = incomeGroupSortOrder(label);
-    const subtotal = groupItems.reduce((s, i) => s + i.amount, 0);
-    out.push({
-      key,
-      label,
-      sortOrder,
-      items: groupItems,
-      subtotal,
-    });
-  }
-  out.sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
-  });
-  return out;
-}
-
-/** Agrupa despesas (realizadas ou previstas) por conta, caixinha ou cartão. */
-function groupExpensesByPaymentSource(items: MonthMovementRow[]): PaymentSourceGroup[] {
-  const map = new Map<string, MonthMovementRow[]>();
-  for (const item of items) {
-    const k = paymentSourceGroupKey(item);
-    const arr = map.get(k) ?? [];
-    arr.push(item);
-    map.set(k, arr);
-  }
-  const out: PaymentSourceGroup[] = [];
+  const out: SourceGroup[] = [];
   for (const [key, groupItems] of map) {
     const first = groupItems[0]!;
     const st = (first.sourceType ?? "").trim();
-    const label =
-      !st || st === "account"
-        ? CHECKING_ACCOUNT_LABEL
-        : (first.source?.trim() || (first.sourceType === "pocket" ? "Caixinha" : "Cartão"));
-    const sortOrder = !st || st === "account" ? 0 : first.sourceType === "pocket" ? 1 : 2;
-    const subtotal = groupItems.reduce((s, i) => s + i.amount, 0);
+    const isAccount = !st || st === "account";
     out.push({
       key,
-      label,
-      sortOrder,
+      label: isAccount ? CHECKING_ACCOUNT_LABEL : first.source?.trim() || (st === "pocket" ? "Caixinha" : "Cartão"),
+      sortOrder: isAccount ? 0 : st === "pocket" ? 1 : 2,
       sourceType: first.sourceType,
       sourceId: first.sourceId ?? null,
-      items: groupItems,
-      subtotal,
+      items: [...groupItems].sort((a, b) => a.date.localeCompare(b.date)),
+      subtotal: groupItems.reduce((s, i) => s + Math.abs(i.amount), 0),
     });
   }
-  out.sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
-  });
-  return out;
+  return out.sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }));
 }
 
-/** Nome do cartão para o título do modal (rótulo costuma ser "Cartão Nome"). */
-function cardDisplayNameForExpenseGroup(group: PaymentSourceGroup): string {
-  const raw = group.label.trim();
-  return raw.replace(/^Cartão\s+/i, "").trim() || raw;
+/** Remove valores em R$ do rótulo de destino: o valor já está na linha. */
+function cleanSource(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const out = s.replace(/\s*R\$\s*[\d.\s\u00a0]+(?:,\d{2})?/gi, " ").replace(/\s+/g, " ").trim();
+  return out || null;
 }
 
-function PaymentSourceGroupHeader({
-  label,
-  subtotal,
-  sourceType,
-  direction = "out",
-  variant = "default",
-  trailingAction,
-}: {
-  label: string;
-  subtotal: number;
-  sourceType?: MonthMovementRow["sourceType"];
-  /** Entradas: ícone/ cor verde; saídas: vermelho. */
-  direction?: "in" | "out";
-  /** `plain`: sem linha inferior (ex.: cabeçalho dentro de AccordionTrigger). */
-  variant?: "default" | "plain";
-  /** Ex.: botão de planejar pagamento do cartão (use stopPropagation no clique). */
-  trailingAction?: ReactNode;
-}) {
-  let Icon: typeof Landmark;
-  if (direction === "in") {
-    const L = label.toLowerCase();
-    if (L.includes("·") || label.includes(" · ")) Icon = Layers;
-    else if (L.includes("caixinha")) Icon = PiggyBank;
-    else Icon = Landmark;
-  } else {
-    Icon = sourceType === "card" ? WalletCards : sourceType === "pocket" ? PiggyBank : Landmark;
+function isForecastNote(s: string | null | undefined): boolean {
+  return Boolean(s && /previst/i.test(s));
+}
+
+function cardName(label: string): string {
+  return label.replace(/^Cartão\s+/i, "").trim() || label;
+}
+
+function tileTone(row: MonthMovementRow, todayStr: string): TileTone {
+  if (row.type === "in") return "in";
+  if (row.type === "future_in") return "forecast-in";
+  const s = rowStatus(row);
+  if (s === "aberto") return daysFromToday(effectiveDate(row), todayStr) <= 2 ? "open" : "open-later";
+  if (s === "previsto") return "forecast";
+  return "out";
+}
+
+function statusWord(row: MonthMovementRow, todayStr: string, isCurrentMonth: boolean): string | null {
+  if (row.type === "in") return null;
+  const s = rowStatus(row);
+  const date = effectiveDate(row);
+  if (row.type === "future_in") {
+    const diff = daysFromToday(date, todayStr);
+    if (!isCurrentMonth || diff < 0) return "previsto";
+    return diff === 0 ? "entra hoje" : diff === 1 ? "entra amanhã" : `entra em ${diff} dias`;
   }
-  const isIn = direction === "in";
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-2",
-        variant === "default" && "border-b border-border pb-2",
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="truncate font-semibold text-foreground">{label}</span>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {trailingAction}
-        <Badge
-          variant="secondary"
-          className={cn(
-            "shrink-0 tabular-nums font-semibold",
-            isIn ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400",
-          )}
-        >
-          Subtotal {isIn ? "+" : ""}
-          {formatCurrency(subtotal)}
-        </Badge>
-      </div>
-    </div>
-  );
-}
-
-function SourceMetric({
-  label,
-  value,
-  sublabel,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  sublabel?: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border/80 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/40">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={cn("text-base font-semibold tabular-nums leading-tight tracking-tight", valueClassName ?? "text-foreground")}>
-        {value}
-      </span>
-      {sublabel ? <span className="text-[10px] text-muted-foreground">{sublabel}</span> : null}
-    </div>
-  );
-}
-
-function calendarMeansAlreadyPaid(status: CalendarRelativeStatus | null): boolean {
-  return status?.kind === "yesterday" || status?.kind === "earlier";
-}
-
-function PagoBadge() {
-  return (
-    <Badge
-      variant="outline"
-      className="gap-1 border-emerald-600/50 bg-emerald-50 font-normal text-emerald-950 dark:border-emerald-600/45 dark:bg-emerald-950/35 dark:text-emerald-100"
-    >
-      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-      Pago
-    </Badge>
-  );
-}
-
-function EmAbertoBadge() {
-  return (
-    <Badge variant="outline" className="font-normal text-muted-foreground">
-      Em aberto
-    </Badge>
-  );
-}
-
-/** Despesa quitável: “Pago” só entra na mão. Transferência/ajuste segue o calendário. */
-function ExpenseStatusBadges({
-  calendar,
-  paid,
-  hideSettledBadge,
-}: {
-  calendar: CalendarRelativeStatus | null;
-  paid?: boolean;
-  hideSettledBadge?: boolean;
-}) {
-  if (paid === true) {
-    if (hideSettledBadge) return null;
-    return <PagoBadge />;
+  if (s === "aberto") return isCurrentMonth ? dueWord(date, todayStr) : "em aberto";
+  if (s === "previsto") {
+    const diff = daysFromToday(date, todayStr);
+    if (!isCurrentMonth || diff < 0) return "previsto";
+    return diff === 0 ? "hoje" : diff === 1 ? "amanhã" : `em ${diff} dias`;
   }
-  if (paid === false) {
-    if (calendar && !calendarMeansAlreadyPaid(calendar)) {
-      return <ExpenseDateBadges status={calendar} />;
-    }
-    return <EmAbertoBadge />;
-  }
-  return <ExpenseDateBadges status={calendar} />;
-}
-
-function FutureExpenseStatus({
-  item,
-  calendar,
-}: {
-  item: MonthMovementRow;
-  calendar: CalendarRelativeStatus | null;
-}) {
-  if (item.sourceType === "card" && typeof item.paid === "boolean") {
-    return <ExpenseStatusBadges calendar={calendar} paid={item.paid} />;
-  }
-  if (calendar && !calendarMeansAlreadyPaid(calendar)) {
-    return <ExpenseDateBadges status={calendar} />;
-  }
-  return (
-    <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-900/50 dark:text-amber-100">
-      Previsto
-    </Badge>
-  );
-}
-
-function PurchasePaidCheckbox({
-  paid,
-  pending,
-  onToggle,
-}: {
-  paid: boolean;
-  pending: boolean;
-  onToggle: (next: boolean) => void;
-}) {
-  return (
-    <label
-      className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-foreground"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <Checkbox
-        checked={paid}
-        disabled={pending}
-        onCheckedChange={(checked) => {
-          if (checked === "indeterminate") return;
-          onToggle(checked === true);
-        }}
-        aria-label={paid ? "Desmarcar como pago" : "Marcar como pago"}
-      />
-      Pago
-    </label>
-  );
-}
-
-function CardStatementPaidButton({
-  paid,
-  pending,
-  onToggle,
-}: {
-  paid: boolean;
-  pending: boolean;
-  onToggle: (next: boolean) => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant={paid ? "secondary" : "outline"}
-      size="sm"
-      className="h-7 gap-1 px-2 text-xs"
-      disabled={pending}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggle(!paid);
-      }}
-    >
-      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      {paid ? "Fatura paga" : "Marcar fatura paga"}
-    </Button>
-  );
-}
-
-function cardGroupIsPaid(group: PaymentSourceGroup): boolean {
-  return group.items.length > 0 && group.items.every((item) => item.paid === true);
-}
-
-function OutMovementRow({
-  item,
-  onSelectPurchase,
-  dateBadge,
-  showPurchasePaidToggle,
-  showCardStatementToggle,
-  purchasePending,
-  cardPending,
-  onTogglePurchasePaid,
-  onToggleCardStatement,
-}: {
-  item: MonthMovementRow;
-  onSelectPurchase: (id: string) => void;
-  dateBadge?: CalendarRelativeStatus | null;
-  showPurchasePaidToggle?: boolean;
-  showCardStatementToggle?: boolean;
-  purchasePending?: boolean;
-  cardPending?: boolean;
-  onTogglePurchasePaid?: (purchaseId: string, paid: boolean) => void;
-  onToggleCardStatement?: (cardId: string, paid: boolean) => void;
-}) {
-  const isCard = item.sourceType === "card";
-  const isClickable = Boolean(item.purchaseId);
-  const paid = item.paid;
-
-  const inner = (
-    <>
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <ArrowUpCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-500" />
-          <span className="font-medium text-red-950 dark:text-red-100">{item.title}</span>
-          {isCard ? (
-            <Badge variant="outline" className="font-normal">
-              Cartão
-            </Badge>
-          ) : null}
-          <ExpenseStatusBadges
-            calendar={dateBadge ?? null}
-            paid={paid}
-            hideSettledBadge={Boolean(showPurchasePaidToggle || showCardStatementToggle)}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3 shrink-0" />
-            {formatDisplayDate(item.date)}
-          </span>
-          {item.category ? <span>{item.category}</span> : null}
-          {item.source ? <span>{item.source}</span> : null}
-          {item.installmentCount && item.installmentCount > 1 ? (
-            <span className="tabular-nums">
-              Parcela {item.installmentNumber}/{item.installmentCount}
-            </span>
-          ) : null}
-        </div>
-        {isCard && item.statementMonth ? (
-          <div className="pl-6 text-xs text-muted-foreground">
-            Fatura de <span className="font-medium text-foreground">{formatYearMonthLabel(item.statementMonth)}</span>
-            {item.dueDate ? (
-              <>
-                {" "}
-                · venc. <span className="font-medium text-foreground">{formatDisplayDate(item.dueDate)}</span>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-        {isCard && item.cardFundingPlan ? (
-          <div className="pl-6 text-xs text-muted-foreground">
-            Pagar fatura com:{" "}
-            <span className="font-medium text-foreground">{item.cardFundingPlan}</span>
-          </div>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="text-right font-semibold tabular-nums text-red-700 dark:text-red-400">
-          {formatCurrency(item.amount)}
-        </span>
-        {isClickable ? <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden /> : null}
-      </div>
-    </>
-  );
-
-  const purchaseToggle =
-    showPurchasePaidToggle && item.purchaseId && typeof paid === "boolean" && onTogglePurchasePaid ? (
-      <PurchasePaidCheckbox
-        paid={paid}
-        pending={Boolean(purchasePending)}
-        onToggle={(next) => onTogglePurchasePaid(item.purchaseId!, next)}
-      />
-    ) : null;
-  const cardToggle =
-    showCardStatementToggle && isCard && item.sourceId && typeof paid === "boolean" && onToggleCardStatement ? (
-      <CardStatementPaidButton
-        paid={paid}
-        pending={Boolean(cardPending)}
-        onToggle={(next) => onToggleCardStatement(item.sourceId!, next)}
-      />
-    ) : null;
-
-  const baseClass =
-    "flex w-full items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/80 px-3 py-3 text-left transition dark:border-red-900/50 dark:bg-red-950/30";
-
-  if (isClickable) {
-    return (
-      <div className={`${baseClass} hover:bg-red-100/90 dark:hover:bg-red-950/50`}>
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-start justify-between gap-3 text-left"
-          onClick={() => onSelectPurchase(item.purchaseId!)}
-        >
-          {inner}
-        </button>
-        {purchaseToggle}
-        {cardToggle}
-      </div>
-    );
-  }
-
-  return (
-    <div className={baseClass}>
-      <div className="flex min-w-0 flex-1 items-start justify-between gap-3">{inner}</div>
-      {purchaseToggle}
-      {cardToggle}
-    </div>
-  );
-}
-
-function FutureMovementRow({
-  item,
-  dateBadge,
-  showCardStatementToggle,
-  cardPending,
-  onToggleCardStatement,
-}: {
-  item: MonthMovementRow;
-  dateBadge?: CalendarRelativeStatus | null;
-  showCardStatementToggle?: boolean;
-  cardPending?: boolean;
-  onToggleCardStatement?: (cardId: string, paid: boolean) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/25">
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <ArrowUpCircle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
-          <span className="font-medium text-amber-950 dark:text-amber-100">{item.title}</span>
-          <FutureExpenseStatus item={item} calendar={dateBadge ?? null} />
-          {item.sourceType === "card" ? (
-            <Badge variant="outline" className="font-normal">
-              Cartão
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3 shrink-0" />
-            {formatDisplayDate(item.date)}
-          </span>
-          {item.source ? <span>{item.source}</span> : null}
-        </div>
-        {item.sourceType === "card" && item.statementMonth ? (
-          <div className="pl-6 text-xs text-muted-foreground">
-            Fatura de <span className="font-medium text-foreground">{formatYearMonthLabel(item.statementMonth)}</span>
-            {item.dueDate ? (
-              <>
-                {" "}
-                · venc. <span className="font-medium text-foreground">{formatDisplayDate(item.dueDate)}</span>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-        {item.sourceType === "card" && item.cardFundingPlan ? (
-          <div className="pl-6 text-xs text-muted-foreground">
-            Pagar fatura com:{" "}
-            <span className="font-medium text-foreground">{item.cardFundingPlan}</span>
-          </div>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-2">
-        <span className="font-semibold tabular-nums text-amber-900 dark:text-amber-200/90">
-          {formatCurrency(item.amount)}
-        </span>
-        {showCardStatementToggle &&
-        item.sourceType === "card" &&
-        item.sourceId &&
-        typeof item.paid === "boolean" &&
-        onToggleCardStatement ? (
-          <CardStatementPaidButton
-            paid={item.paid}
-            pending={Boolean(cardPending)}
-            onToggle={(next) => onToggleCardStatement(item.sourceId!, next)}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function FutureInMovementRow({
-  item,
-  futureRelative,
-}: {
-  item: MonthMovementRow;
-  futureRelative: ReturnType<typeof futureIncomingRelativeStatus>;
-}) {
-  const primaryBadge =
-    futureRelative?.kind === "today" ? (
-      <Badge
-        variant="outline"
-        className="gap-1 border-sky-500/70 bg-sky-50 font-normal text-sky-950 dark:border-sky-600/55 dark:bg-sky-950/35 dark:text-sky-100"
-      >
-        <CalendarCheck className="h-3 w-3 shrink-0" aria-hidden />
-        Vai entrar hoje
-      </Badge>
-    ) : futureRelative?.kind === "upcoming" ? (
-      <Badge
-        variant="outline"
-        className="gap-1 border-amber-500/70 bg-amber-50 font-normal text-amber-950 dark:border-amber-600/55 dark:bg-amber-950/35 dark:text-amber-100"
-      >
-        <Clock className="h-3 w-3 shrink-0" aria-hidden />
-        {futureRelative.daysLeft === 1 ? "Falta 1 dia" : `Faltam ${futureRelative.daysLeft} dias`}
-      </Badge>
-    ) : (
-      <Badge className="border-sky-300 bg-sky-100 text-sky-900 hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-900/50 dark:text-sky-100">
-        Previsto
-      </Badge>
-    );
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-3 dark:border-sky-900/50 dark:bg-sky-950/30">
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <ArrowDownCircle className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
-          <span className="font-medium text-sky-950 dark:text-sky-100">{item.title}</span>
-          {primaryBadge}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {formatDisplayDate(item.date)}
-          </span>
-          {item.source ? <span>{item.source}</span> : null}
-          {item.extra ? <span>{item.extra}</span> : null}
-        </div>
-      </div>
-      <span className="shrink-0 font-semibold tabular-nums text-sky-800 dark:text-sky-300">
-        +{formatCurrency(item.amount)}
-      </span>
-    </div>
-  );
-}
-
-function InMovementRow({ item, dateBadge }: { item: MonthMovementRow; dateBadge?: CalendarRelativeStatus | null }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-3 dark:border-green-900/50 dark:bg-green-950/30">
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <ArrowDownCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-500" />
-          <span className="font-medium text-green-900 dark:text-green-100">{item.title}</span>
-          <IncomeDateBadges status={dateBadge ?? null} />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {formatDisplayDate(item.date)}
-          </span>
-          {item.category ? <span>{item.category}</span> : null}
-          {item.source ? <span>{item.source}</span> : null}
-          {item.extra ? <span>{item.extra}</span> : null}
-        </div>
-      </div>
-      <span className="shrink-0 font-semibold tabular-nums text-green-700 dark:text-green-400">
-        +{formatCurrency(item.amount)}
-      </span>
-    </div>
-  );
+  return "pago";
 }
 
 export function MovementsList() {
-  const [month, setMonth] = useState<string>(currentMonthParam);
+  const searchParams = useSearchParams();
+  const current = currentMonthParam();
+  const minMonth = shiftMonth(current, -12);
+  const maxMonth = shiftMonth(current, 12);
+  const monthParam = searchParams.get("month");
+  const statusParam = searchParams.get("status");
+
+  const [month, setMonth] = useState(() =>
+    monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam >= minMonth && monthParam <= maxMonth ? monthParam : current,
+  );
+  const [status, setStatus] = useState<MonthStatus | null>(() =>
+    statusParam && statusParam in STATUS_LABEL ? (statusParam as MonthStatus) : null,
+  );
+  const [view, setView] = useState<ViewMode>("source");
   const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
-  const [fundingModalCard, setFundingModalCard] = useState<{
-    id: string;
-    name: string;
-    /** Subtotal do grupo (Despesas realizadas) — mesmo critério do total da fatura naquele mês. */
-    invoiceTotalFromList?: number;
-  } | null>(null);
-  const [fundingModalEpoch, setFundingModalEpoch] = useState(0);
-  const { data: movementsResponse, isLoading, isError, error } = useMonthMovements(month);
+  const [fundingCard, setFundingCard] = useState<{ id: string; name: string; invoiceTotal?: number } | null>(null);
+  const [fundingEpoch, setFundingEpoch] = useState(0);
+
+  const { data, isLoading, isError, error } = useMonthMovements(month);
   const setPurchasePaid = useSetPurchasePaid();
-  const setCardStatementPaid = useSetCardStatementPaid();
+  const setStatementPaid = useSetCardStatementPaid();
   const purchasePendingId = setPurchasePaid.isPending ? setPurchasePaid.variables?.purchaseId : undefined;
-  const cardPendingId = setCardStatementPaid.isPending ? setCardStatementPaid.variables?.cardId : undefined;
-  const list = movementsResponse?.data;
+  const cardPendingId = setStatementPaid.isPending ? setStatementPaid.variables?.cardId : undefined;
+
+  const list = data?.data;
+  const sourcesSummary = data?.sourcesSummary;
+  const isCurrentMonth = month === current;
+  const todayStr = todayYmd();
+  const totals = useMemo(() => computeMonthTotals(list), [list]);
+  const deficit = totals.sobra < 0;
+
+  const filtered = useMemo(
+    () => (list ?? []).filter((row) => !status || rowStatus(row) === status),
+    [list, status],
+  );
+  const incoming = useMemo(
+    () => filtered.filter((r) => r.type === "in" || r.type === "future_in").sort((a, b) => a.date.localeCompare(b.date)),
+    [filtered],
+  );
+  const outgoingGroups = useMemo(
+    () => groupBySource(filtered.filter((r) => r.type === "out" || r.type === "future_out")),
+    [filtered],
+  );
+  const chronological = useMemo(
+    () => [...filtered].sort((a, b) => effectiveDate(a).localeCompare(effectiveDate(b))),
+    [filtered],
+  );
 
   function togglePurchase(purchaseId: string, paid: boolean) {
     setPurchasePaid.mutate(
       { purchaseId, paid },
-      {
-        onError: (error) =>
-          toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o pagamento"),
-      },
+      { onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível atualizar o pagamento") },
     );
   }
 
-  function toggleCardStatement(cardId: string, paid: boolean) {
-    setCardStatementPaid.mutate(
-      { cardId, statementMonth: month, paid },
-      {
-        onError: (error) =>
-          toast.error(error instanceof Error ? error.message : "Não foi possível atualizar a fatura"),
-      },
+  function toggleStatement(cardId: string, paid: boolean, statementMonth = month) {
+    setStatementPaid.mutate(
+      { cardId, statementMonth, paid },
+      { onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível atualizar a fatura") },
     );
   }
-  const sourcesSummary = movementsResponse?.sourcesSummary;
-  const isCurrentMonth = month === currentMonthParam();
-  const current = currentMonthParam();
-  const minMonth = addMonths(current, -12);
-  const maxMonth = addMonths(current, 12);
-  const canGoPrev = month > minMonth;
-  const canGoNext = month < maxMonth;
-  const todayStr = format(new Date(), "yyyy-MM-dd");
 
-  const grouped = useMemo(() => groupMovements(list), [list]);
-  const [expenseViewMode, setExpenseViewMode] = useState<MovementsExpenseViewMode>("by_payment_source");
-  const incomingByDestination = useMemo(() => groupIncomeByDestination(grouped.incoming), [grouped.incoming]);
-  const incomingFutureByDestination = useMemo(
-    () => groupIncomeByDestination(grouped.incomingFuture),
-    [grouped.incomingFuture],
-  );
-  const outgoingBySource = useMemo(() => groupExpensesByPaymentSource(grouped.outgoing), [grouped.outgoing]);
-  const futureBySource = useMemo(() => groupExpensesByPaymentSource(grouped.future), [grouped.future]);
+  function renderRow(row: MonthMovementRow, opts: { showSource: boolean }) {
+    const isCard = row.sourceType === "card";
+    const isIn = row.type === "in" || row.type === "future_in";
+    const inCardGroup = isCard && !opts.showSource;
+    const word = inCardGroup && rowStatus(row) !== "pago" ? null : statusWord(row, todayStr, isCurrentMonth);
+    const meta = [
+      word,
+      opts.showSource || isIn ? cleanSource(row.source) : null,
+      isForecastNote(row.category) ? null : row.category,
+      row.installmentCount && row.installmentCount > 1 ? `${row.installmentNumber}/${row.installmentCount}` : null,
+      isForecastNote(row.extra) || /parcela/i.test(row.extra ?? "") ? null : row.extra,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const urgent =
+      !inCardGroup && rowStatus(row) === "aberto" && isCurrentMonth && daysFromToday(effectiveDate(row), todayStr) <= 0;
 
-  const totals = useMemo(() => {
-    if (!list) {
-      return {
-        inRealized: 0,
-        futureIn: 0,
-        entradas: 0,
-        despesas: 0,
-        recorrentesPrevistas: 0,
-        resultado: 0,
-      };
+    let action: ReactNode = null;
+    if (!isCard && row.purchaseId && typeof row.paid === "boolean") {
+      action = (
+        <PaidCheck
+          paid={row.paid}
+          pending={purchasePendingId === row.purchaseId}
+          label={row.title}
+          onToggle={(next) => togglePurchase(row.purchaseId!, next)}
+        />
+      );
+    } else if (isCard && opts.showSource && row.sourceId && typeof row.paid === "boolean") {
+      action = (
+        <PaidCheck
+          paid={row.paid}
+          pending={cardPendingId === row.sourceId}
+          label={`a fatura ${cardName(row.source ?? "")}`}
+          onToggle={(next) => toggleStatement(row.sourceId!, next, row.statementMonth ?? month)}
+        />
+      );
     }
-    let inRealized = 0;
-    let futureIn = 0;
-    let despesas = 0;
-    let recorrentesPrevistas = 0;
-    for (const item of list) {
-      if (item.type === "in") inRealized += item.amount;
-      else if (item.type === "future_in") futureIn += item.amount;
-      else if (item.type === "out") despesas += Math.abs(item.amount);
-      else if (item.type === "future_out") recorrentesPrevistas += Math.abs(item.amount);
-    }
-    const entradas = inRealized + futureIn;
-    const resultado = entradas - despesas - recorrentesPrevistas;
-    return { inRealized, futureIn, entradas, despesas, recorrentesPrevistas, resultado };
-  }, [list]);
 
-  const hasAnySource = Boolean(
-    sourcesSummary?.account || (sourcesSummary?.pockets?.length ?? 0) > 0 || (sourcesSummary?.cards?.length ?? 0) > 0
-  );
-  const allSufficient =
-    hasAnySource &&
-    (sourcesSummary?.account?.sufficient ?? true) &&
-    (sourcesSummary?.pockets?.every((p) => p.sufficient) ?? true) &&
-    (sourcesSummary?.cards?.every((c) => c.sufficient) ?? true);
+    return (
+      <LedgerRow
+        key={row.id}
+        tile={<DayTile day={dayOfMonth(inCardGroup ? row.date : effectiveDate(row))} tone={tileTone(row, todayStr)} />}
+        title={row.title}
+        meta={<span className={urgent ? "text-ink-open" : undefined}>{meta}</span>}
+        amount={
+          isIn ? (
+            <span className="text-ink-in">{formatAmount(row.amount, "+")}</span>
+          ) : (
+            formatAmount(row.amount, "−")
+          )
+        }
+        onOpen={row.purchaseId ? () => setDetailPurchaseId(row.purchaseId!) : undefined}
+        openLabel={`Ver ${row.title}`}
+        action={action}
+      />
+    );
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="pb-4">
       <PurchaseDetailDialog
         purchaseId={detailPurchaseId}
         open={detailPurchaseId !== null}
-        onOpenChange={(open) => {
-          if (!open) setDetailPurchaseId(null);
-        }}
+        onOpenChange={(o) => !o && setDetailPurchaseId(null)}
       />
       <CardStatementFundingModal
-        key={fundingModalCard ? `${fundingModalCard.id}-${fundingModalEpoch}-${month}` : "idle"}
-        card={fundingModalCard ? { id: fundingModalCard.id, name: fundingModalCard.name } : null}
-        open={!!fundingModalCard}
+        key={fundingCard ? `${fundingCard.id}-${fundingEpoch}-${month}` : "idle"}
+        card={fundingCard ? { id: fundingCard.id, name: fundingCard.name } : null}
+        open={!!fundingCard}
         initialStatementMonth={month}
-        invoiceTotalFromList={fundingModalCard?.invoiceTotalFromList}
-        invoiceTotalFromListMonth={fundingModalCard?.invoiceTotalFromList != null ? month : undefined}
-        onClose={() => setFundingModalCard(null)}
+        invoiceTotalFromList={fundingCard?.invoiceTotal}
+        invoiceTotalFromListMonth={fundingCard?.invoiceTotal != null ? month : undefined}
+        onClose={() => setFundingCard(null)}
       />
 
-      {isCurrentMonth && hasAnySource && sourcesSummary && (
-        <Card className="border-primary/20 bg-primary/5 dark:bg-primary/10">
-          <Accordion type="single" collapsible defaultValue="sources-summary" className="w-full">
-            <AccordionItem value="sources-summary" className="border-0">
-              <AccordionTrigger className="px-6 py-4 hover:no-underline data-[state=open]:pb-3">
-                <div className="flex flex-1 flex-col items-start gap-1 pr-2 text-left">
-                  <span className="flex items-center gap-2 text-base font-semibold leading-none text-foreground">
-                    <Wallet className="h-4 w-4 shrink-0" aria-hidden />
-                    Dinheiro suficiente por fonte?
-                  </span>
-                  <span className="text-xs font-normal text-muted-foreground">
-                    Conta e caixinhas: saldo atual vs. saídas ainda não debitadas no saldo (compras com data futura no mês).
-                    Compras de hoje ou anteriores já estão no saldo e não entram de novo nas saídas. Cartão: o &quot;usado&quot;
-                    já inclui as compras do mês — o limite disponível não é descontado de novo pelas saídas.
-                  </span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-6 pb-6 pt-0">
-                <div className="space-y-3">
-            {sourcesSummary.account && (
-              <div
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${
-                  sourcesSummary.account.sufficient
-                    ? "border-green-200 bg-green-50/80 dark:border-green-900/50 dark:bg-green-950/30"
-                    : "border-red-200 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/30"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium text-foreground">Conta corrente</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                  <span className="text-muted-foreground">
-                    Saldo inicial: <span className="font-semibold tabular-nums text-foreground">{formatCurrency(sourcesSummary.account.balance)}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Saídas do mês: <span className="font-semibold tabular-nums text-red-600 dark:text-red-500">{formatCurrency(sourcesSummary.account.outflows)}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Saldo após o mês:{" "}
-                    <span
-                      className={`font-semibold tabular-nums ${
-                        sourcesSummary.account.balance - sourcesSummary.account.outflows >= 0 ? "text-foreground" : "text-destructive"
-                      }`}
-                    >
-                      {formatCurrency(sourcesSummary.account.balance - sourcesSummary.account.outflows)}
-                    </span>
-                  </span>
-                  {sourcesSummary.account.sufficient ? (
-                    <span className="flex items-center gap-1 font-medium text-green-700 dark:text-green-400">
-                      <CheckCircle2 className="h-4 w-4" /> Suficiente
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 font-medium text-destructive">
-                      <AlertTriangle className="h-4 w-4" /> Insuficiente
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-            {sourcesSummary.pockets.map((p) => {
-              const after = p.balance - p.outflows;
-              return (
-                <div
-                  key={p.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${
-                    p.sufficient
-                      ? "border-green-200 bg-green-50/80 dark:border-green-900/50 dark:bg-green-950/30"
-                      : "border-red-200 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <PiggyBank className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="font-medium text-foreground">Caixinha {p.name}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                    <span className="text-muted-foreground">
-                      Saldo inicial: <span className="font-semibold tabular-nums text-foreground">{formatCurrency(p.balance)}</span>
-                    </span>
-                    <span className="text-muted-foreground">
-                      Saídas do mês: <span className="font-semibold tabular-nums text-red-600 dark:text-red-500">{formatCurrency(p.outflows)}</span>
-                    </span>
-                    <span className="text-muted-foreground">
-                      Saldo após o mês: <span className={`font-semibold tabular-nums ${after >= 0 ? "text-foreground" : "text-destructive"}`}>{formatCurrency(after)}</span>
-                    </span>
-                    {p.sufficient ? (
-                      <span className="flex items-center gap-1 font-medium text-green-700 dark:text-green-400">
-                        <CheckCircle2 className="h-4 w-4" /> Suficiente
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 font-medium text-destructive">
-                        <AlertTriangle className="h-4 w-4" /> Insuficiente
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {sourcesSummary.cards.map((c) => {
-              const available = c.creditLimit - c.used;
-              const estimatedAtMonthStart = available + c.outflows;
-              return (
-                <div
-                  key={c.id}
-                  className={`flex flex-col gap-3 rounded-lg border px-3 py-3 sm:px-4 sm:py-4 ${
-                    c.sufficient
-                      ? "border-green-200 bg-green-50/80 dark:border-green-900/50 dark:bg-green-950/30"
-                      : "border-red-200 bg-red-50/80 dark:border-red-900/50 dark:bg-red-950/30"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <WalletCards className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate font-semibold text-foreground">Cartão {c.name}</span>
-                    </div>
-                    {c.sufficient ? (
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 gap-1 border-green-600/45 bg-green-600/10 text-green-800 dark:border-green-500/50 dark:bg-green-500/15 dark:text-green-400"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Dentro do limite
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" className="shrink-0 gap-1">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        Acima do limite
-                      </Badge>
-                    )}
-                  </div>
+      <header className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold lowercase leading-none tracking-tight text-foreground">movimentos</h1>
+        <MonthSwitcher month={month} onChange={setMonth} min={minMonth} max={maxMonth} />
+      </header>
 
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-                    <SourceMetric label="Limite contratado" value={formatCurrency(c.creditLimit)} />
-                    <SourceMetric label="Já utilizado" value={formatCurrency(c.used)} />
-                    <SourceMetric
-                      label="Disponível agora"
-                      value={formatCurrency(available)}
-                      valueClassName={available >= 0 ? "text-foreground" : "text-destructive"}
-                      sublabel="Limite − uso"
-                    />
-                    <SourceMetric
-                      label="Compras no mês"
-                      value={formatCurrency(c.outflows)}
-                      valueClassName="text-red-600 dark:text-red-400"
-                      sublabel="Soma nesta tela"
-                    />
-                  </div>
-
-                  <div className="rounded-md border border-dashed border-border/70 bg-muted/40 px-3 py-2.5 text-sm">
-                    <p className="text-xs font-medium text-muted-foreground">Referência: limite no início do mês (estimado)</p>
-                    <p className="mt-1 text-base font-semibold tabular-nums text-foreground">{formatCurrency(estimatedAtMonthStart)}</p>
-                    <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                      Soma do disponível atual com as compras do mês nesta tela. O total &quot;usado&quot; do cartão já inclui o mês.
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-            {!allSufficient && (
-              <p className="text-xs text-muted-foreground">
-                Uma ou mais fontes estão com saldo insuficiente ou com limite de cartão estourado.
-              </p>
-            )}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader className="space-y-4 pb-3">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">Filtrar por mês</CardTitle>
-            <div className="flex w-full max-w-md items-center justify-center gap-2 sm:w-auto sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                onClick={() => setMonth(addMonths(month, -1))}
-                disabled={!canGoPrev}
-                aria-label="Mês anterior"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="min-w-0 flex-1 text-center text-sm font-medium text-foreground sm:min-w-[10rem] sm:flex-initial">
-                {formatYearMonthLabel(month)}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                onClick={() => setMonth(addMonths(month, 1))}
-                disabled={!canGoNext}
-                aria-label="Próximo mês"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="movements-expense-view" className="text-sm font-medium text-foreground">
-                Lançamentos — visualização
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Agrupe entradas e despesas por destino ou forma de pagamento; subtotais por grupo.
-              </p>
-            </div>
-            <SelectOptions
-              id="movements-expense-view"
-              className="w-full min-w-0 sm:w-[280px]"
-              value={expenseViewMode}
-              onValueChange={(v) => setExpenseViewMode(v as MovementsExpenseViewMode)}
-              options={[
-                { value: "chronological", label: "Lista por data" },
-                { value: "by_payment_source", label: "Por destino / forma de pagamento (padrão)" },
-              ]}
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
+      <section aria-label="Resumo do mês" className="pt-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-end md:gap-10">
+        <div>
+          <p className="text-[15px] font-medium lowercase text-muted-foreground">
+            {deficit ? "falta" : "sobra"} em {monthName(month)}
+          </p>
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              Carregando...
-            </div>
-          ) : isError ? (
-            <div className="space-y-2 py-12 text-center">
-              <p className="text-sm font-medium text-destructive">Não foi possível carregar os movimentos.</p>
-              <p className="text-xs text-muted-foreground">
-                {error instanceof Error ? error.message : "Erro desconhecido"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Se você atualizou o app recentemente, rode <code className="rounded bg-muted px-1 py-0.5">npm run db:migrate</code>{" "}
-                no projeto para aplicar migrações do banco.
-              </p>
-            </div>
-          ) : !list || list.length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              Nenhum movimento neste mês.
-            </p>
+            <>
+              <p className="mt-1 h-12 w-44 animate-pulse bg-muted" aria-label="Carregando" />
+              <p className="mt-2 h-5 w-40 animate-pulse bg-muted" />
+            </>
           ) : (
             <>
-              <div className="mb-6 space-y-4 rounded-lg border border-border bg-muted/30 px-4 py-4 dark:bg-muted/20">
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Entradas (realizadas)</p>
-                    <p className="text-lg font-semibold tabular-nums text-green-700 dark:text-green-400">
-                      {formatCurrency(totals.inRealized)}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Entradas previstas</p>
-                    <p className="text-lg font-semibold tabular-nums text-sky-700 dark:text-sky-400">
-                      {formatCurrency(totals.futureIn)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">Depósitos recorrentes ainda não creditados</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Despesas</p>
-                    <p className="text-lg font-semibold tabular-nums text-red-700 dark:text-red-400">
-                      {formatCurrency(totals.despesas)}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Recorrentes previstas</p>
-                    <p className="text-lg font-semibold tabular-nums text-amber-800 dark:text-amber-300">
-                      {formatCurrency(totals.recorrentesPrevistas)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">Despesas recorrentes a executar</p>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium text-foreground">Total de entradas</p>
-                    <p className="text-xs text-muted-foreground">
-                      {totals.futureIn > 0
-                        ? `Realizadas + previstas: ${formatCurrency(totals.inRealized)} + ${formatCurrency(totals.futureIn)}`
-                        : "Somente lançamentos já creditados neste mês"}
-                    </p>
-                  </div>
-                  <p className="text-xl font-bold tabular-nums text-green-700 dark:text-green-400">
-                    {formatCurrency(totals.entradas)}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-background/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Resultado do mês (estimado)</p>
-                    <p className="text-xs text-muted-foreground">
-                      Entradas − despesas − recorrentes previstas
-                    </p>
-                  </div>
-                  <p
-                    className={cn(
-                      "text-xl font-bold tabular-nums",
-                      totals.resultado >= 0 ? "text-green-700 dark:text-green-400" : "text-destructive",
-                    )}
-                  >
-                    {totals.resultado >= 0 ? "+" : ""}
-                    {formatCurrency(totals.resultado)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-8">
-                {grouped.incoming.length > 0 ? (
-                  <section className="space-y-3">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Entradas</h2>
-                    {expenseViewMode === "chronological" ? (
-                      <ul className="space-y-2">
-                        {grouped.incoming.map((item) => (
-                          <li key={item.id}>
-                            <InMovementRow
-                              item={item}
-                              dateBadge={calendarRelativeStatus(isCurrentMonth, item.date, todayStr)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="space-y-6">
-                        {incomingByDestination.map((g) => (
-                          <div key={g.key} className="space-y-2">
-                            <PaymentSourceGroupHeader
-                              label={g.label}
-                              subtotal={g.subtotal}
-                              direction="in"
-                            />
-                            <ul className="space-y-2">
-                              {g.items.map((item) => (
-                                <li key={item.id}>
-                                  <InMovementRow
-                                    item={item}
-                                    dateBadge={calendarRelativeStatus(isCurrentMonth, item.date, todayStr)}
-                                  />
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                ) : null}
-
-                {grouped.incomingFuture.length > 0 ? (
-                  <section className="space-y-3">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                      Entradas previstas (depósitos recorrentes)
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                      Aparecem aqui até serem creditados ao executar os recorrentes ou quando o depósito já estiver
-                      lançado no mês.
-                    </p>
-                    {expenseViewMode === "chronological" ? (
-                      <ul className="space-y-2">
-                        {grouped.incomingFuture.map((item) => (
-                          <li key={item.id}>
-                            <FutureInMovementRow
-                              item={item}
-                              futureRelative={futureIncomingRelativeStatus(isCurrentMonth, item.date, todayStr)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="space-y-6">
-                        {incomingFutureByDestination.map((g) => (
-                          <div key={g.key} className="space-y-2">
-                            <PaymentSourceGroupHeader
-                              label={g.label}
-                              subtotal={g.subtotal}
-                              direction="in"
-                            />
-                            <ul className="space-y-2">
-                              {g.items.map((item) => (
-                                <li key={item.id}>
-                                  <FutureInMovementRow
-                                    item={item}
-                                    futureRelative={futureIncomingRelativeStatus(isCurrentMonth, item.date, todayStr)}
-                                  />
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
-                ) : null}
-
-                {grouped.outgoing.length > 0 ? (
-                  <section className="space-y-3">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Despesas</h2>
-                    <p className="text-xs text-muted-foreground">
-                      Toque em uma despesa para ver parcelas e vencimento. Em conta ou caixinha, marque Pago em cada
-                      lançamento. No cartão, marque a fatura do mês: todas as compras daquele mês ficam pagas.
-                    </p>
-                    {expenseViewMode === "chronological" ? (
-                      <ul className="space-y-2">
-                        {grouped.outgoing.map((item) => (
-                          <li key={item.id}>
-                            <OutMovementRow
-                              item={item}
-                              onSelectPurchase={setDetailPurchaseId}
-                              dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
-                              showPurchasePaidToggle={Boolean(item.purchaseId) && item.sourceType !== "card"}
-                              showCardStatementToggle={item.sourceType === "card" && Boolean(item.sourceId)}
-                              purchasePending={purchasePendingId === item.purchaseId}
-                              cardPending={cardPendingId === item.sourceId}
-                              onTogglePurchasePaid={togglePurchase}
-                              onToggleCardStatement={toggleCardStatement}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <Accordion
-                        type="multiple"
-                        className="w-full space-y-3"
-                        defaultValue={outgoingBySource.map((g) => g.key)}
-                      >
-                        {outgoingBySource.map((g) => (
-                          <AccordionItem
-                            key={g.key}
-                            value={g.key}
-                            className="overflow-hidden rounded-lg border border-border"
-                          >
-                            <AccordionTrigger className="px-3 py-3 hover:no-underline">
-                              <PaymentSourceGroupHeader
-                                label={g.label}
-                                subtotal={g.subtotal}
-                                sourceType={g.sourceType}
-                                variant="plain"
-                                trailingAction={
-                                  g.sourceType === "card" && g.sourceId ? (
-                                    <>
-                                      <CardStatementPaidButton
-                                        paid={cardGroupIsPaid(g)}
-                                        pending={cardPendingId === g.sourceId}
-                                        onToggle={(next) => toggleCardStatement(g.sourceId!, next)}
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 gap-1 px-2 text-xs"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          setFundingModalCard({
-                                            id: g.sourceId!,
-                                            name: cardDisplayNameForExpenseGroup(g),
-                                            invoiceTotalFromList: Math.abs(g.subtotal),
-                                          });
-                                          setFundingModalEpoch((x) => x + 1);
-                                        }}
-                                      >
-                                        <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                        Pagamento da fatura
-                                      </Button>
-                                    </>
-                                  ) : null
-                                }
-                              />
-                            </AccordionTrigger>
-                            <AccordionContent className="px-3 pb-3 pt-0">
-                              <ul className="space-y-2">
-                                {g.items.map((item) => (
-                                  <li key={item.id}>
-                                    <OutMovementRow
-                                      item={item}
-                                      onSelectPurchase={setDetailPurchaseId}
-                                      dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
-                                      showPurchasePaidToggle={Boolean(item.purchaseId) && item.sourceType !== "card"}
-                                      purchasePending={purchasePendingId === item.purchaseId}
-                                      onTogglePurchasePaid={togglePurchase}
-                                    />
-                                  </li>
-                                ))}
-                              </ul>
-                            </AccordionContent>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
-                    )}
-                  </section>
-                ) : null}
-
-                {grouped.future.length > 0 ? (
-                  <section className="space-y-3">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recorrentes previstas</h2>
-                    {expenseViewMode === "chronological" ? (
-                      <ul className="space-y-2">
-                        {grouped.future.map((item) => (
-                          <li key={item.id}>
-                            <FutureMovementRow
-                              item={item}
-                              dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
-                              showCardStatementToggle={item.sourceType === "card" && Boolean(item.sourceId)}
-                              cardPending={cardPendingId === item.sourceId}
-                              onToggleCardStatement={toggleCardStatement}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <Accordion
-                        type="multiple"
-                        className="w-full space-y-3"
-                        defaultValue={futureBySource.map((g) => g.key)}
-                      >
-                        {futureBySource.map((g) => (
-                          <AccordionItem
-                            key={g.key}
-                            value={g.key}
-                            className="overflow-hidden rounded-lg border border-border"
-                          >
-                            <AccordionTrigger className="px-3 py-3 hover:no-underline">
-                              <PaymentSourceGroupHeader
-                                label={g.label}
-                                subtotal={g.subtotal}
-                                sourceType={g.sourceType}
-                                variant="plain"
-                                trailingAction={
-                                  g.sourceType === "card" && g.sourceId ? (
-                                    <>
-                                      <CardStatementPaidButton
-                                        paid={cardGroupIsPaid(g)}
-                                        pending={cardPendingId === g.sourceId}
-                                        onToggle={(next) => toggleCardStatement(g.sourceId!, next)}
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 gap-1 px-2 text-xs"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          setFundingModalCard({
-                                            id: g.sourceId!,
-                                            name: cardDisplayNameForExpenseGroup(g),
-                                          });
-                                          setFundingModalEpoch((x) => x + 1);
-                                        }}
-                                      >
-                                        <Landmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                                        Pagamento da fatura
-                                      </Button>
-                                    </>
-                                  ) : null
-                                }
-                              />
-                            </AccordionTrigger>
-                            <AccordionContent className="px-3 pb-3 pt-0">
-                              <ul className="space-y-2">
-                                {g.items.map((item) => (
-                                  <li key={item.id}>
-                                    <FutureMovementRow
-                                      item={item}
-                                      dateBadge={outgoingExpenseCalendarStatus(item, isCurrentMonth, todayStr)}
-                                    />
-                                  </li>
-                                ))}
-                              </ul>
-                            </AccordionContent>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
-                    )}
-                  </section>
-                ) : null}
-              </div>
+              <p className={cn("mt-1 text-[48px] font-bold leading-none tracking-[-0.03em] tabular-nums", deficit && "text-ink-out")}>
+                <span className="mr-1.5 text-2xl font-medium tracking-normal">{deficit ? "−R$" : "R$"}</span>
+                {formatAmount(totals.sobra)}
+              </p>
+              <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">
+                entra {formatAmount(totals.entradas)} · sai {formatAmount(totals.saidas)}
+              </p>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        {isLoading ? (
+          <div className="mt-5 h-12 animate-pulse bg-muted md:mt-0" />
+        ) : (
+          <MonthPlane className="mt-5 md:mt-0" size="md" totals={totals} active={status} onSelect={setStatus} />
+        )}
+      </section>
+
+      <div className="sticky top-0 z-20 -mx-4 mt-6 flex items-center justify-between gap-3 border-b border-border bg-background px-4 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:-mx-6 sm:px-6 md:static md:mx-0 md:px-0 md:pt-2">
+        {status ? (
+          <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => setStatus(null)}>
+            só {STATUS_LABEL[status]}
+            <X aria-hidden />
+            <span className="sr-only">Limpar filtro</span>
+          </Button>
+        ) : (
+          <span className="text-[15px] text-muted-foreground tabular-nums">
+            {list ? `${list.length} lançamentos` : ""}
+          </span>
+        )}
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => v && setView(v as ViewMode)}
+          aria-label="Organizar por"
+          className="gap-0 border border-input"
+        >
+          <ToggleGroupItem value="source" className="h-8 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background">
+            por fonte
+          </ToggleGroupItem>
+          <ToggleGroupItem value="date" className="h-8 px-3 data-[state=on]:bg-foreground data-[state=on]:text-background">
+            por data
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3 pt-6" aria-label="Carregando">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-12 animate-pulse bg-muted" />
+          ))}
+        </div>
+      ) : isError ? (
+        <div className="space-y-2 py-10">
+          <p className="text-[15px] font-medium text-ink-out">Não foi possível carregar os movimentos.</p>
+          <p className="text-[15px] text-muted-foreground">{error instanceof Error ? error.message : "Erro desconhecido"}</p>
+        </div>
+      ) : !list || list.length === 0 ? (
+        <p className="py-10 text-[15px] text-muted-foreground">Nenhum movimento em {monthName(month)}.</p>
+      ) : filtered.length === 0 ? (
+        <p className="py-10 text-[15px] text-muted-foreground">Nada {STATUS_LABEL[status!]} em {monthName(month)}.</p>
+      ) : view === "date" ? (
+        <div className="pt-2">{chronological.map((row) => renderRow(row, { showSource: true }))}</div>
+      ) : (
+        <div>
+          {incoming.length > 0 ? (
+            <GroupBlock title="entradas">
+              {incoming.map((row) => renderRow(row, { showSource: false }))}
+            </GroupBlock>
+          ) : null}
+          {outgoingGroups.map((g) => {
+            const isCard = g.sourceType === "card" && Boolean(g.sourceId);
+            const outItems = g.items.filter((i) => i.type === "out");
+            const cardPaid = isCard && outItems.length > 0 && outItems.every((i) => i.paid === true);
+            const dueDate = isCard ? g.items.find((i) => i.dueDate)?.dueDate : null;
+            const plan = isCard ? g.items.find((i) => i.cardFundingPlan)?.cardFundingPlan : null;
+            return (
+              <GroupBlock
+                key={g.key}
+                title={g.label}
+                subtotal={formatAmount(g.subtotal, "−")}
+                meta={
+                  isCard
+                    ? [
+                        `fatura de ${formatYearMonthLabel(g.items[0]?.statementMonth ?? month).toLowerCase()}`,
+                        dueDate ? `vence ${formatDisplayDate(dueDate).slice(0, 5)}` : null,
+                        plan ? `paga com ${plan}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : null
+                }
+                actions={
+                  isCard ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={cardPaid ? "secondary" : "outline"}
+                        disabled={cardPendingId === g.sourceId || outItems.length === 0}
+                        onClick={() => toggleStatement(g.sourceId!, !cardPaid)}
+                        className={cn("gap-1.5", cardPaid && "bg-plane-out text-white hover:bg-plane-out/90")}
+                      >
+                        {cardPaid ? <Check aria-hidden /> : null}
+                        {cardPaid ? "fatura paga" : "marcar fatura paga"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setFundingCard({
+                            id: g.sourceId!,
+                            name: cardName(g.label),
+                            invoiceTotal: outItems.length ? outItems.reduce((s, i) => s + Math.abs(i.amount), 0) : undefined,
+                          });
+                          setFundingEpoch((x) => x + 1);
+                        }}
+                      >
+                        pagar com…
+                      </Button>
+                    </>
+                  ) : null
+                }
+              >
+                {g.items.map((row) => renderRow(row, { showSource: false }))}
+              </GroupBlock>
+            );
+          })}
+        </div>
+      )}
+
+      {isCurrentMonth && sourcesSummary ? <SourcesSection summary={sourcesSummary} /> : null}
     </div>
+  );
+}
+
+function GroupBlock({
+  title,
+  subtotal,
+  meta,
+  actions,
+  children,
+}: {
+  title: string;
+  subtotal?: ReactNode;
+  meta?: string | null;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="pt-8">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="min-w-0 text-2xl font-bold leading-tight tracking-tight text-foreground">{title}</h2>
+        {subtotal ? <span className="shrink-0 text-[15px] font-medium tabular-nums text-foreground">{subtotal}</span> : null}
+      </div>
+      {meta ? <p className="mt-0.5 text-[15px] text-muted-foreground">{meta}</p> : null}
+      {actions ? <div className="mt-2 flex flex-wrap gap-2">{actions}</div> : null}
+      <div className="mt-2 border-t-2 border-foreground">{children}</div>
+    </section>
+  );
+}
+
+type SourcesSummary = NonNullable<ReturnType<typeof useMonthMovements>["data"]>["sourcesSummary"];
+
+function SourcesSection({ summary }: { summary: SourcesSummary }) {
+  const rows: Array<{ key: string; name: string; detail: string; ok: boolean; word: string }> = [];
+  if (summary.account) {
+    const after = summary.account.balance - summary.account.outflows;
+    rows.push({
+      key: "account",
+      name: "Conta corrente",
+      detail: `${formatAmount(summary.account.balance)} → ${formatAmount(after, after < 0 ? "−" : undefined)}`,
+      ok: summary.account.sufficient,
+      word: summary.account.sufficient ? "cobre" : "não cobre",
+    });
+  }
+  for (const p of summary.pockets) {
+    const after = p.balance - p.outflows;
+    rows.push({
+      key: p.id,
+      name: p.name,
+      detail: `${formatAmount(p.balance)} → ${formatAmount(after, after < 0 ? "−" : undefined)}`,
+      ok: p.sufficient,
+      word: p.sufficient ? "cobre" : "não cobre",
+    });
+  }
+  for (const c of summary.cards) {
+    const available = c.creditLimit - c.used;
+    rows.push({
+      key: c.id,
+      name: `Cartão ${c.name}`,
+      detail: `livre ${formatAmount(available, available < 0 ? "−" : undefined)} de ${formatAmount(c.creditLimit)}`,
+      ok: c.sufficient,
+      word: c.sufficient ? "no limite" : "acima do limite",
+    });
+  }
+  if (rows.length === 0) return null;
+  const short = rows.filter((r) => !r.ok).length;
+
+  return (
+    <Accordion type="single" collapsible className="mt-10 border-t-2 border-foreground">
+      <AccordionItem value="sources" className="border-b-0">
+        <AccordionTrigger className="py-4 text-2xl font-bold hover:no-underline">
+          <span className="flex items-baseline gap-3">
+            fontes
+            <span className={cn("text-[15px] font-medium", short ? "text-ink-out" : "text-muted-foreground")}>
+              {short ? `${short} não ${short === 1 ? "cobre" : "cobrem"} o mês` : "todas cobrem o mês"}
+            </span>
+          </span>
+        </AccordionTrigger>
+        <AccordionContent>
+          <p className="pb-2 text-[15px] text-muted-foreground">Saldo hoje → depois das saídas que ainda não saíram.</p>
+          <ul>
+            {rows.map((r) => (
+              <li key={r.key} className="flex min-h-12 items-center gap-3 border-t border-border py-2">
+                <span className={cn("size-2.5 shrink-0", r.ok ? "bg-plane-in" : "bg-plane-out")} aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] text-foreground">{r.name}</span>
+                  <span className="block text-[15px] tabular-nums text-muted-foreground">{r.detail}</span>
+                </span>
+                <span className={cn("text-[15px] font-medium", r.ok ? "text-muted-foreground" : "text-ink-out")}>{r.word}</span>
+              </li>
+            ))}
+          </ul>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }

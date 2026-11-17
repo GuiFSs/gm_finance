@@ -2,6 +2,14 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — redesign "Concreto" (dashboard, movimentos, compras)
+
+- Status: `pronto-para-revisar`
+- Resumo: Nova identidade visual (impeccable, direção "Concreto": fundo #141414, planos vermelho/amarelo/azul, cantos retos, Jost, minúsculas, 3 tamanhos 48/24/15). Redesenho das 3 páginas principais e do shell; demais rotas herdam tokens mas não foram redesenhadas. Revisor final: ship.
+- Arquivos-chave: `globals.css`, `layout.tsx`, `src/features/month/*` (novo), `dashboard-overview.tsx`, `movements-list.tsx`, `purchase-list.tsx`, `purchase-form.tsx`, `app-shell.tsx`, `voice-command-fab.tsx`
+- DESIGN.md + design.json reescritos (overwrite) para Concreto.
+- Próximo: smoke do toggle Pago no banco real; migrar as outras rotas
+
 ## 2026-11-17 — DESIGN.md e sidecar (impeccable document)
 
 - Status: `pronto-para-revisar`
