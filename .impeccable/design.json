@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-17T13:10:00Z",
+  "generatedAt": "2026-11-17T16:40:00Z",
   "title": "Design System: G&M Finance",
   "extensions": {
     "colorMeta": {
@@ -21,7 +21,7 @@
       "on-plane-light": { "role": "neutral", "displayName": "White on Plane", "canonical": "#ffffff", "tonalRamp": ["#141414", "#3a3a37", "#6e6e69", "#a3a39e", "#cfcfcb", "#ebebe8", "#f7f7f5", "#ffffff"] }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The single answer amount (sobra/falta) on Dashboard and Movimentos." },
+      "display": { "displayName": "Display", "purpose": "The single answer amount: sobra/falta on Dashboard and Movimentos, and the route answer (guardado, livre, falta guardar, fixo por mês, entrou, livre no plano) everywhere else. Turns ink-out when the answer is a deficit." },
       "headline": { "displayName": "Headline", "purpose": "Lowercase page titles, wordmark and section headings." },
       "body": { "displayName": "Body", "purpose": "Meta lines, legend labels, nav and all other content." },
       "body-strong": { "displayName": "Body Strong", "purpose": "Ledger titles, amounts, day-tile numerals, active nav." },
@@ -69,23 +69,23 @@
       "refersTo": "button-primary",
       "description": "Square ink slab with ground text; nova compra in the sidebar, form submits.",
       "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>nova compra</button>",
-      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; background: #ebebe8; color: #141414; border: 0; border-radius: 0; font-family: var(--font-jost), Jost, system-ui, sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 150ms, transform 100ms; } .ds-btn-primary:hover { background: rgba(235,235,232,0.9); } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; background: #ebebe8; color: #141414; border: 1px solid #ebebe8; border-radius: 0; font-family: var(--font-jost), Jost, system-ui, sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 150ms, transform 100ms; } .ds-btn-primary:hover { background: rgba(235,235,232,0.9); } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; } .ds-btn-primary:disabled { background: transparent; border-color: #3a3a37; color: #a3a39e; cursor: default; transform: none; }"
     },
     {
       "name": "Ghost and Outline Buttons",
       "kind": "button",
       "refersTo": "button-ghost",
       "description": "Ghost for the month switcher and sair; outline for secondary actions in sheets.",
-      "html": "<div class=\"ds-btn-row\"><button class=\"ds-btn-ghost ds-btn-icon\" aria-label=\"Mês anterior\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"m15 18-6-6 6-6\"/></svg></button><span class=\"ds-month\">novembro 2026</span><button class=\"ds-btn-ghost ds-btn-icon\" aria-label=\"Próximo mês\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"/></svg></button><button class=\"ds-btn-outline\">sair</button></div>",
-      "css": ".ds-btn-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-jost), Jost, system-ui, sans-serif; color: #ebebe8; background: #141414; padding: 12px; } .ds-month { min-width: 7.5rem; text-align: center; font-size: 15px; font-weight: 500; } .ds-btn-ghost, .ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 0; color: #ebebe8; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 150ms; } .ds-btn-ghost { background: transparent; border: 0; } .ds-btn-icon { width: 40px; height: 40px; padding: 0; } .ds-btn-outline { background: #141414; border: 1px solid #3a3a37; margin-left: auto; } .ds-btn-ghost:hover, .ds-btn-outline:hover { background: #262625; } .ds-btn-ghost:focus-visible, .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
+      "html": "<div class=\"ds-btn-row\"><button class=\"ds-btn-ghost ds-btn-icon\" aria-label=\"Mês anterior\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"m15 18-6-6 6-6\"/></svg></button><span class=\"ds-month\">novembro 2026</span><button class=\"ds-btn-ghost ds-btn-icon\" aria-label=\"Próximo mês\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"/></svg></button><button class=\"ds-btn-ghost ds-btn-danger\">excluir</button><button class=\"ds-btn-outline\">sair</button></div>",
+      "css": ".ds-btn-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-jost), Jost, system-ui, sans-serif; color: #ebebe8; background: #141414; padding: 12px; } .ds-month { min-width: 7.5rem; text-align: center; font-size: 15px; font-weight: 500; } .ds-btn-ghost, .ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border-radius: 0; color: #ebebe8; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; transition: background-color 150ms; } .ds-btn-ghost { background: transparent; border: 0; } .ds-btn-icon { width: 40px; height: 40px; padding: 0; } .ds-btn-danger { color: #ff7a6e; } .ds-btn-outline { background: #141414; border: 1px solid #3a3a37; margin-left: auto; } .ds-btn-ghost:hover, .ds-btn-outline:hover { background: #262625; } .ds-btn-ghost:focus-visible, .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
     },
     {
       "name": "Text Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "Square transparent field with a strong-rule border and amarelo focus ring.",
-      "html": "<label class=\"ds-field\"><span class=\"ds-field-lbl\">descrição</span><input class=\"ds-input\" placeholder=\"mercado\"></label>",
-      "css": ".ds-field { display: grid; gap: 8px; font-family: var(--font-jost), Jost, system-ui, sans-serif; background: #141414; color: #ebebe8; padding: 16px; } .ds-field-lbl { font-size: 15px; font-weight: 500; } .ds-input { height: 36px; padding: 4px 12px; background: transparent; color: #ebebe8; border: 1px solid #3a3a37; border-radius: 0; font: inherit; font-size: 15px; caret-color: #f2c230; transition: box-shadow 150ms; } .ds-input::placeholder { color: #a3a39e; } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
+      "description": "Square 40px field, transparent fill, strong-rule border, pencil sentence-case label, amarelo focus ring. Number inputs have no spinners.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-lbl\">Descrição</span><input class=\"ds-input\" placeholder=\"mercado\"><span class=\"ds-field-hint\">aparece na lista</span></label>",
+      "css": ".ds-field { display: grid; gap: 6px; font-family: var(--font-jost), Jost, system-ui, sans-serif; background: #141414; color: #ebebe8; padding: 16px; } .ds-field-lbl, .ds-field-hint { font-size: 15px; font-weight: 400; color: #a3a39e; } .ds-input { height: 40px; padding: 4px 12px; background: transparent; color: #ebebe8; border: 1px solid #3a3a37; border-radius: 0; font: inherit; font-size: 15px; caret-color: #f2c230; transition: box-shadow 150ms; } .ds-input[type=number]::-webkit-inner-spin-button, .ds-input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } .ds-input::placeholder { color: #a3a39e; } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; } .ds-input:disabled { opacity: 0.5; }"
     },
     {
       "name": "Mobile Tab Bar",
@@ -107,9 +107,25 @@
       "name": "Segmented Toggle",
       "kind": "chip",
       "refersTo": "segmented-toggle-on",
-      "description": "Square view switch (por fonte / por data); selected segment inverts to ink.",
+      "description": "Square view switch; selected segment inverts to ink. 32px for por fonte/por data and avulsos/recorrentes, 40px beside inputs (R$/%), 56px for the two people on login.",
       "html": "<div class=\"ds-seg-group\" role=\"group\"><button class=\"ds-seg-btn is-on\" aria-pressed=\"true\">por fonte</button><button class=\"ds-seg-btn\" aria-pressed=\"false\">por data</button></div>",
       "css": ".ds-seg-group { display: inline-flex; padding: 12px; background: #141414; font-family: var(--font-jost), Jost, system-ui, sans-serif; } .ds-seg-btn { height: 32px; padding: 0 12px; border: 1px solid #3a3a37; border-radius: 0; background: transparent; color: #ebebe8; font: inherit; font-size: 15px; cursor: pointer; transition: background-color 150ms; } .ds-seg-btn + .ds-seg-btn { border-left: 0; } .ds-seg-btn:hover { background: #262625; } .ds-seg-btn.is-on { background: #ebebe8; color: #141414; border-color: #ebebe8; } .ds-seg-btn:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; }"
+    },
+    {
+      "name": "Answer Figure",
+      "kind": "custom",
+      "refersTo": "display",
+      "description": "The one number a route opens with: pencil question, 48px amount with a 24px R$ prefix, pencil meta. Deficit moves the figure to the red text ink and the label says so.",
+      "html": "<div class=\"ds-answer\"><p class=\"ds-answer-lbl\">passou do limite dos cartões</p><p class=\"ds-answer-fig is-deficit\"><span>−R$</span>14.232,05</p><p class=\"ds-answer-meta\">usado 50.112,05 de 35.880,00</p></div>",
+      "css": ".ds-answer { font-family: var(--font-jost), Jost, system-ui, sans-serif; font-feature-settings: \"tnum\" 1; background: #141414; padding: 16px; } .ds-answer-lbl, .ds-answer-meta { margin: 0; font-size: 15px; font-weight: 500; color: #a3a39e; } .ds-answer-fig { margin: 4px 0; font-size: 48px; font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: #ebebe8; } .ds-answer-fig span { margin-right: 6px; font-size: 24px; font-weight: 500; letter-spacing: 0; } .ds-answer-fig.is-deficit { color: #ff7a6e; }"
+    },
+    {
+      "name": "Dialog",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Raised square slab, 24px lowercase title, 40px close. On a phone cancel and save share the row and the destructive action sits below; from 640px the destructive action moves left.",
+      "html": "<div class=\"ds-dialog\"><button class=\"ds-dialog-close\" aria-label=\"Fechar\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg></button><h2 class=\"ds-dialog-title\">editar caixinha</h2><div class=\"ds-dialog-actions\"><button class=\"ds-dialog-ghost\">excluir</button><button class=\"ds-dialog-outline\">Cancelar</button><button class=\"ds-dialog-save\">Salvar</button></div></div>",
+      "css": ".ds-dialog { position: relative; max-width: 32rem; padding: 24px; background: #1b1b1a; color: #ebebe8; border: 1px solid #3a3a37; border-radius: 0; font-family: var(--font-jost), Jost, system-ui, sans-serif; } .ds-dialog-close { position: absolute; top: 16px; right: 16px; width: 40px; height: 40px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 0; color: #ebebe8; cursor: pointer; } .ds-dialog-close:hover { background: #262625; } .ds-dialog-close:focus-visible, .ds-dialog-outline:focus-visible, .ds-dialog-save:focus-visible, .ds-dialog-ghost:focus-visible { outline: none; box-shadow: 0 0 0 1px #f2c230; } .ds-dialog-title { margin: 0 40px 16px 0; font-size: 24px; font-weight: 700; line-height: 1.25; letter-spacing: -0.025em; text-transform: lowercase; } .ds-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #2c2c2a; } .ds-dialog-outline, .ds-dialog-save, .ds-dialog-ghost { height: 40px; padding: 0 16px; border-radius: 0; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; } .ds-dialog-outline { flex: 1; background: #141414; color: #ebebe8; border: 1px solid #3a3a37; } .ds-dialog-outline:hover { background: #262625; } .ds-dialog-save { flex: 1; background: #ebebe8; color: #141414; border: 1px solid #ebebe8; } .ds-dialog-save:hover { background: rgba(235,235,232,0.9); } .ds-dialog-save:active { transform: scale(0.98); } .ds-dialog-ghost { flex-basis: 100%; background: transparent; border: 0; color: #ff7a6e; } .ds-dialog-ghost:hover { background: #262625; }"
     }
   ],
   "narrative": {
@@ -145,7 +161,7 @@
       "Don't label a value twice or add explanatory copy under numbers and headings.",
       "Don't add shadows, rounded corners, smooth gradients or tinted backgrounds; hard 135° stripes are reserved for the deficit.",
       "Don't add uppercase or letter-spaced labels above headings.",
-      "Don't introduce a fourth hue for categories, tags or status."
+      "Don't introduce a fourth hue for tags or status. The category pie is the one exception, shared with the year category columns: each category keeps one flat color there, and each tag keeps one flat color on its own pie and columns."
     ]
   }
 }

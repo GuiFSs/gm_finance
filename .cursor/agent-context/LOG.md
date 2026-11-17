@@ -2,6 +2,13 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — sidecar do design alinhado
+
+- Status: `pronto-para-revisar`
+- Resumo: `.impeccable/design.json` foi regenerado a partir do DESIGN.md atual (botão 40px, input 40px, figura-resposta, diálogo, disabled sem preenchimento). `.impeccable/config.json` ganhou `buildPath: code`. `impeccable doctor` ficou sem achados. DESIGN.md não foi reescrito.
+- Arquivos-chave: `.impeccable/design.json`, `.impeccable/config.json`
+- Próximo: commitar esses dois arquivos
+
 ## 2026-11-17 — visual Concreto em todas as rotas
 
 - Status: `pronto-para-revisar`

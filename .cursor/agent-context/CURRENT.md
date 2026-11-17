@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-11-17 — todas as rotas restantes, login e diálogos migrados para o visual Concreto.
+> Atualizado: 2026-11-17 — sidecar do design regenerado; doctor sem achados.
 
 ## Status
 
@@ -63,7 +63,7 @@ Com dashboard, movimentos e compras já no visual novo, o usuário pediu o mesmo
 
 ## Ainda aberto / próximo passo
 
-- [ ] Commitar (o diff é grande: `src/shared/ui`, `src/features/*`, `src/app/(protected)/*`, `DESIGN.md`)
+- [ ] Commitar o que ficou depois do `5ecb210`: `.impeccable/design.json` (sidecar alinhado ao DESIGN.md) e `.impeccable/config.json` (`buildPath: code`)
 - [ ] Lint: os erros antigos de `react-hooks/set-state-in-effect` em `budget-planner.tsx`, `card-statement-funding-modal.tsx` e `purchase-list.tsx` continuam lá
 - [ ] Smoke no banco real: marcar/desmarcar Pago em `/movements`. Criar, editar e excluir em caixinhas, recorrentes, depósitos e metas (os prints usaram metas mockadas, porque o banco não tem nenhuma)
 - [ ] Pendência anterior: confirmar a migração `0014_expense_payments` no Turso de **produção**
