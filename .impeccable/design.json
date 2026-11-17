@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T12:20:00Z",
+  "title": "Design System: G&M Finance",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Deep Ledger Navy",
+        "canonical": "#0c1222",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Ledger Card Slate",
+        "canonical": "#151d2e",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "surface-muted": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "#1e293b",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Rule Slate",
+        "canonical": "#2d3a4f",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Ink Mist",
+        "canonical": "#e2e8f0",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Pencil Gray",
+        "canonical": "#94a3b8",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#2d3a4f", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Ledger Blue",
+        "canonical": "#3b82f6",
+        "tonalRamp": ["#1e3a8a", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe", "#eff6ff"]
+      },
+      "primary-foreground": {
+        "role": "on-primary",
+        "displayName": "Paper White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0", "#ffffff"]
+      },
+      "destructive": {
+        "role": "tertiary",
+        "displayName": "Overdraft Red",
+        "canonical": "#ef4444",
+        "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fecaca", "#fef2f2"]
+      },
+      "destructive-foreground": {
+        "role": "on-destructive",
+        "displayName": "Paper White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#0c1222", "#151d2e", "#1e293b", "#475569", "#94a3b8", "#cbd5e1", "#e2e8f0", "#ffffff"]
+      },
+      "ring": {
+        "role": "tertiary",
+        "displayName": "Focus Sky",
+        "canonical": "#60a5fa",
+        "tonalRamp": ["#1e3a8a", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe", "#eff6ff"]
+      },
+      "income": {
+        "role": "secondary",
+        "displayName": "Money-In Green",
+        "canonical": "#4ade80",
+        "tonalRamp": ["#14532d", "#166534", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#bbf7d0", "#f0fdf4"]
+      },
+      "expense": {
+        "role": "secondary",
+        "displayName": "Money-Out Red",
+        "canonical": "#f87171",
+        "tonalRamp": ["#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fecaca", "#fef2f2"]
+      },
+      "attention": {
+        "role": "secondary",
+        "displayName": "Pending Amber",
+        "canonical": "#fcd34d",
+        "tonalRamp": ["#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fffbeb"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page titles in PageHeader." },
+      "title": { "displayName": "Title", "purpose": "Card titles and dialog titles." },
+      "body": { "displayName": "Body", "purpose": "List text, card content and form fields." },
+      "label": { "displayName": "Label", "purpose": "Helper text, captions and badge text." }
+    },
+    "shadows": [
+      { "name": "card-dark", "value": "0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.2)", "purpose": "Resting shadow of a card in the shipped dark theme (shadow-lg with shadow-black/20)." },
+      { "name": "button-rest", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Filled button at rest (shadow-md)." },
+      { "name": "floating", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "Hover on filled buttons, and dialog or sheet surfaces (shadow-lg)." },
+      { "name": "control-rest", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "Outline buttons and inputs (shadow-sm)." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for color and shadow transitions." },
+      { "name": "duration-control", "value": "150ms", "purpose": "Color and shadow transitions on controls." },
+      { "name": "duration-dialog", "value": "200ms", "purpose": "Dialog and sheet open and close." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px", "purpose": "Two-column grids; dialog corner radius." },
+      { "name": "md", "value": "768px", "purpose": "Desktop sidebar appears and main content offsets." },
+      { "name": "lg", "value": "1024px", "purpose": "Three to five column summary grids." },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action in a view. Filled Ledger Blue; one per view.",
+      "html": "<button class='ds-btn-primary'>Salvar</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:8px 16px;border:0;border-radius:6px;background:var(--primary,#3b82f6);color:var(--primary-foreground,#ffffff);font:500 14px/20px Geist,system-ui,sans-serif;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1),0 2px 4px -2px rgb(0 0 0 / 0.1);cursor:pointer;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1),box-shadow 150ms cubic-bezier(0.4,0,0.2,1),transform 150ms cubic-bezier(0.4,0,0.2,1)} .ds-btn-primary:hover{background:color-mix(in srgb,var(--primary,#3b82f6) 90%,transparent);box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1),0 4px 6px -4px rgb(0 0 0 / 0.1)} .ds-btn-primary:active{transform:scale(0.98)} .ds-btn-primary:focus-visible{outline:none;box-shadow:0 0 0 1px var(--ring,#60a5fa)}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action beside a primary one, such as Cancelar.",
+      "html": "<button class='ds-btn-outline'>Cancelar</button>",
+      "css": ".ds-btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:8px 16px;border:1px solid var(--border,#2d3a4f);border-radius:6px;background:var(--background,#0c1222);color:var(--foreground,#e2e8f0);font:500 14px/20px Geist,system-ui,sans-serif;box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);cursor:pointer;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1)} .ds-btn-outline:hover{background:var(--secondary,#2d3a4f)} .ds-btn-outline:focus-visible{outline:none;box-shadow:0 0 0 1px var(--ring,#60a5fa)}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text and amount field. Transparent background, 1px border, Focus Sky ring.",
+      "html": "<input class='ds-input' placeholder='Descrição' />",
+      "css": ".ds-input{box-sizing:border-box;width:100%;height:36px;padding:4px 12px;border:1px solid var(--border,#2d3a4f);border-radius:6px;background:transparent;color:var(--foreground,#e2e8f0);font:400 14px/20px Geist,system-ui,sans-serif;box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);transition:box-shadow 150ms cubic-bezier(0.4,0,0.2,1)} .ds-input::placeholder{color:var(--muted-foreground,#94a3b8)} .ds-input:focus-visible{outline:none;box-shadow:0 0 0 1px var(--ring,#60a5fa)}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Container for a group of related figures, with a title and a muted description.",
+      "html": "<div class='ds-card'><div class='ds-card-title'>Saldos</div><p class='ds-card-desc'>Conta corrente e caixinhas</p></div>",
+      "css": ".ds-card{box-sizing:border-box;padding:24px;border:1px solid var(--border,#2d3a4f);border-radius:12px;background:var(--surface,#151d2e);color:var(--foreground,#e2e8f0);box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.2),0 4px 6px -4px rgb(0 0 0 / 0.2);font-family:Geist,system-ui,sans-serif} .ds-card-title{font:600 18px/1 Geist,system-ui,sans-serif;letter-spacing:-0.025em} .ds-card-desc{margin:8px 0 0;font:400 14px/20px Geist,system-ui,sans-serif;color:var(--muted-foreground,#94a3b8)}"
+    },
+    {
+      "name": "Negative Badge",
+      "kind": "chip",
+      "refersTo": "badge-destructive",
+      "description": "Flags a negative balance next to its figure. Always pairs the color with the word.",
+      "html": "<span class='ds-badge-negative'>Negativo</span>",
+      "css": ".ds-badge-negative{display:inline-flex;align-items:center;gap:2px;padding:2px 10px;border-radius:6px;background:var(--destructive,#ef4444);color:var(--destructive-foreground,#ffffff);font:600 12px/16px Geist,system-ui,sans-serif;white-space:nowrap}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "description": "Sidebar link. Active item gets a blue tint and blue text; inactive items use gray text.",
+      "html": "<a class='ds-nav-item ds-nav-item-active' href='#'>Movimentos do mês</a> <a class='ds-nav-item' href='#'>Cartões</a>",
+      "css": ".ds-nav-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;font:400 14px/20px Geist,system-ui,sans-serif;color:#d1d5db;text-decoration:none;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1)} .ds-nav-item:hover{background:#1f2937} .ds-nav-item-active{background:rgb(30 58 138 / 0.3);color:#60a5fa}"
+    },
+    {
+      "name": "Progress Bar",
+      "kind": "custom",
+      "description": "Thin fully rounded bar. Track is Ledger Blue at 20%; fill is Ledger Blue.",
+      "html": "<div class='ds-progress' role='progressbar' aria-valuenow='60' aria-valuemin='0' aria-valuemax='100'><div class='ds-progress-bar' style='width:60%'></div></div>",
+      "css": ".ds-progress{position:relative;height:8px;width:100%;overflow:hidden;border-radius:9999px;background:color-mix(in srgb,var(--primary,#3b82f6) 20%,transparent)} .ds-progress-bar{height:100%;background:var(--primary,#3b82f6);transition:width 150ms cubic-bezier(0.4,0,0.2,1)}"
+    },
+    {
+      "name": "Money Figure",
+      "kind": "custom",
+      "description": "Signature amount. Tabular figures, colored by direction. Pair with a sign or word.",
+      "html": "<span class='ds-money ds-money-in'>+ R$ 1.250,00</span> <span class='ds-money ds-money-out'>- R$ 480,00</span> <span class='ds-money ds-money-negative'>- R$ 35,10</span>",
+      "css": ".ds-money{font-weight:600;font-variant-numeric:tabular-nums;font-family:Geist,system-ui,sans-serif} .ds-money-in{color:#4ade80} .ds-money-out{color:#f87171} .ds-money-negative{color:var(--destructive,#ef4444)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Household Ledger",
+    "overview": "G&M Finance is a shared cashbook for two people. The screen should feel like the ledger kept on the kitchen table: exact, unhurried, and out of the way of the numbers. Dark surfaces are the shipped default, so the app stays quiet at night. The blue primary appears only where someone needs to act.\n\nDensity is comfortable-to-dense. Small type carries most of the content, many rows fit on one screen, and cards keep generous padding. Hierarchy comes from size and weight, not color. Money is the hero, so amounts are set in tabular figures and colored by direction.\n\nRejected, confirmed by the user: gradients, glassmorphism, neon accents, a cold and formal bank-portal look, and playful mascots or emoji-heavy copy.",
+    "keyCharacteristics": [
+      "Dark-first: the app ships with html class dark",
+      "One blue accent; the money-status colors carry direction, not decoration",
+      "Flat at rest; shadows only on cards, buttons, and floating layers",
+      "Small type with tabular figures on every amount",
+      "6px controls, 12px cards"
+    ],
+    "rules": [
+      { "name": "The Direction Rule", "body": "Green means money in, red means money out, amber means pending or needs attention. These hues never decorate.", "section": "colors" },
+      { "name": "The Tabular Figures Rule", "body": "Every amount uses tabular-nums so money columns align. Never set an amount in proportional digits.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "Rows, list items, and page sections are flat. A shadow means the element can be acted on or floats above the page.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use Ledger Blue (primary) for one main action per view.",
+      "Do set every amount with tabular-nums and color it by direction: green for in, red for out, Overdraft Red for negative balances.",
+      "Do pair color with a word or a sign: Negativo, Em aberto, or a leading minus.",
+      "Do keep depth flat at rest. Add shadow only to cards, buttons, and floating layers.",
+      "Do keep controls 36px tall with 6px corners, and cards 12px."
+    ],
+    "donts": [
+      "Don't use gradients, glassmorphism, or neon accents.",
+      "Don't make it look like a cold, formal bank portal, with dense legal-style chrome or intimidating layouts.",
+      "Don't use mascots, bright playful gradients, or emoji-heavy copy.",
+      "Don't introduce a second accent hue. The blue primary and the three money colors are the palette.",
+      "Don't add new gray-* surfaces to screens. Use the tokens and fold drift into them.",
+      "Don't use the money-direction colors for decoration."
+    ]
+  }
+}

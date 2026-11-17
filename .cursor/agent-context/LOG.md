@@ -2,6 +2,20 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — DESIGN.md e sidecar (impeccable document)
+
+- Status: `pronto-para-revisar`
+- Resumo: Scan do sistema visual incumbente. `DESIGN.md` com tokens do tema escuro (padrão enviado), North Star "The Household Ledger" e regras (Direction, Tabular Figures, Flat-At-Rest). `.impeccable/design.json` (schema v2) com 8 componentes `ds-*`. Sem alteração de código do app; drift de `gray-*` no shell registrado, não corrigido.
+- Arquivos-chave: `DESIGN.md`, `.impeccable/design.json`, `src/app/globals.css`, `src/shared/ui/*`
+- Próximo: revisar DESIGN.md com o usuário; decidir sobre o drift de `gray-*`
+
+## 2026-11-17 — PRODUCT.md (impeccable init)
+
+- Status: `pronto-para-revisar`
+- Resumo: Criado `PRODUCT.md` com plataforma `web`, usuários, propósito, restrições e princípios, a partir de entrevista com o usuário. Sem alteração de código do app; sem `DESIGN.md`, sem `.impeccable/config.json`, sem live mode.
+- Arquivos-chave: `PRODUCT.md`, `.cursor/agent-context/CURRENT.md`
+- Próximo: confirmar posicionamento e métrica de sucesso (marcados como inferidos); decidir sobre gaps de delete/edit
+
 ## 2026-11-16 — pagamento manual das despesas
 
 - Status: `pronto-para-revisar`
