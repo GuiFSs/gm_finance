@@ -2,6 +2,13 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — sem categoria e sem tag abrem compras
+
+- Status: `pronto-para-revisar`
+- Resumo: Tocar "sem categoria" ou "sem tag" no dashboard abre `/purchases` filtrada (`uncategorized=1` ou `untagged=1`, com a categoria quando a tag está dentro de uma). A API e o chip de filtro passaram a aceitar os dois casos.
+- Arquivos-chave: `src/shared/lib/finance-service.ts`, `src/app/api/purchases/route.ts`, `src/features/dashboard/dashboard-overview.tsx`, `src/features/purchases/purchase-list.tsx`
+- Próximo: smoke no navegador
+
 ## 2026-11-17 — dashboard abre compras filtradas; ocultar total em compras
 
 - Status: `pronto-para-revisar`

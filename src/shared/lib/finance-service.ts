@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { addMonths, endOfMonth, format, startOfMonth } from "date-fns";
 
 import { db, schema } from "@/db";
@@ -542,6 +542,10 @@ export async function createBalanceAdjustment(input: {
 export async function getPurchases(filters: {
   categoryIds?: string[];
   tagIds?: string[];
+  /** Compras sem categoria. */
+  uncategorized?: boolean;
+  /** Compras sem nenhuma tag. */
+  untagged?: boolean;
   userId?: string;
   startDate?: string;
   endDate?: string;
@@ -550,6 +554,7 @@ export async function getPurchases(filters: {
   if (filters.categoryIds?.length) {
     conditions.push(inArray(schema.purchases.categoryId, filters.categoryIds));
   }
+  if (filters.uncategorized) conditions.push(isNull(schema.purchases.categoryId));
   if (filters.userId) conditions.push(eq(schema.purchases.createdByUserId, filters.userId));
   if (filters.startDate) conditions.push(gte(schema.purchases.purchaseDate, filters.startDate));
   if (filters.endDate) conditions.push(lte(schema.purchases.purchaseDate, filters.endDate));
@@ -603,10 +608,13 @@ export async function getPurchases(filters: {
     tagIdMap.set(row.purchaseId, currentIds);
   }
 
-  const merged = purchaseRows.map((row) => ({ ...row, tags: tagMap.get(row.id) ?? [], tagIds: tagIdMap.get(row.id) ?? [] }));
-  if (!filters.tagIds?.length) return merged;
-  const tagSet = new Set(filters.tagIds);
-  return merged.filter((row) => row.tagIds.some((id) => tagSet.has(id)));
+  let merged = purchaseRows.map((row) => ({ ...row, tags: tagMap.get(row.id) ?? [], tagIds: tagIdMap.get(row.id) ?? [] }));
+  if (filters.tagIds?.length) {
+    const tagSet = new Set(filters.tagIds);
+    merged = merged.filter((row) => row.tagIds.some((id) => tagSet.has(id)));
+  }
+  if (filters.untagged) merged = merged.filter((row) => row.tagIds.length === 0);
+  return merged;
 }
 
 export async function getDashboardData() {

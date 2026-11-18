@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-11-17 — dashboard abre compras filtradas por categoria/tag; compras ganhou ocultar valor total.
+> Atualizado: 2026-11-17 — "sem categoria" e "sem tag" no dashboard também abrem compras filtradas.
 
 ## Status
 
@@ -19,13 +19,16 @@ Dois pedidos do usuário na tela de compras e no dashboard:
   - Tocar a linha ou a fatia de uma categoria chama `openPurchases`, que faz `router.push('/purchases?categoryId=…&startDate=…&endDate=…')`.
   - Tocar uma tag (dentro da categoria aberta) envia `categoryId` + `tagId`.
   - Os ids são resolvidos por nome em `useCategories()` / `useTags()`. Nomes são únicos no schema. Se a lista ainda não carregou, o clique não faz nada.
-  - "sem categoria" e "sem tag" não são clicáveis: a API não filtra por "sem".
+  - "sem categoria" abre compras com `uncategorized=1`. "sem tag" abre compras da categoria aberta com `untagged=1`.
   - O drill-down para as tags continua acessível pelo botão "tags" de cada linha de categoria (`SpendRow` agora tem `onOpen` e `onDrill`).
   - `rowLinks` e `openSlice` ligam linhas e pizza. `CategoryColumns` recebe `rowLinks` no lugar de `onPick`.
 - `src/features/dashboard/period-model.ts` — `periodDateRange(period)`: `YYYY-MM` vira o intervalo do mês, `YYYY` vira o ano (inclusivo).
 - `src/features/purchases/purchase-list.tsx`:
-  - `filtersFromSearchParams` lê `categoryId`, `tagId`, `startDate`, `endDate` da URL no estado inicial dos filtros.
+  - `filtersFromSearchParams` lê `categoryId`, `tagId`, `uncategorized`, `untagged`, `startDate` e `endDate` da URL no estado inicial dos filtros.
   - `showTotals` (padrão `false`): o total do topo vira `R$ •••••` e o total de cada mês vira `•••••`. O valor de cada compra continua visível.
+
+- `getPurchases` / `GET /api/purchases`: `uncategorized=1` exige `categoryId` nulo; `untagged=1` descarta compras que tenham qualquer tag (filtro em memória, depois do join de tags).
+- `usePurchases` e `filtersFromSearchParams` repassam os dois flags. O chip da tela mostra "sem categoria" / "sem tag". Escolher uma categoria ou tag no sheet desliga o flag correspondente.
 
 ## Decisões
 
@@ -48,7 +51,7 @@ Dois pedidos do usuário na tela de compras e no dashboard:
 
 1. `npx tsc --noEmit` limpo
 2. `npx eslint src/features/dashboard src/features/purchases` — só os itens de lint acima
-3. No dashboard, mês: tocar categoria → `/purchases` com o chip da categoria e o intervalo do mês. Tocar tag → chip da categoria + tag.
+3. No dashboard, mês: tocar categoria → `/purchases` com o chip da categoria e o intervalo do mês. Tocar tag → chip da categoria + tag. Tocar "sem categoria" → chip "sem categoria". Dentro de uma categoria, tocar "sem tag" → chip da categoria + "sem tag".
 4. No dashboard, ano, aba "por mês": tocar um mês e depois uma categoria → período = aquele mês. Sem tocar em mês (aba pizza) → ano inteiro.
 5. `/purchases`: total escondido por padrão; o olho mostra o total e os totais por mês.
 

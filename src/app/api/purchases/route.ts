@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
   const data = await getPurchases({
     categoryIds: categoryIds.length ? categoryIds : undefined,
     tagIds: tagIds.length ? tagIds : undefined,
+    uncategorized: searchParams.get("uncategorized") === "1",
+    untagged: searchParams.get("untagged") === "1",
     userId: searchParams.get("userId") ?? undefined,
     startDate: searchParams.get("startDate") ?? undefined,
     endDate: searchParams.get("endDate") ?? undefined,

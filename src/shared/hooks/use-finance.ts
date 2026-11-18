@@ -95,6 +95,8 @@ export function usePurchaseDetail(purchaseId: string | null) {
 export type PurchasesQuery = {
   categoryIds?: string[];
   tagIds?: string[];
+  uncategorized?: boolean;
+  untagged?: boolean;
   userId?: string;
   startDate?: string;
   endDate?: string;
@@ -105,6 +107,8 @@ export function usePurchases(filters: PurchasesQuery) {
   if (filters.userId) params.set("userId", filters.userId);
   if (filters.startDate) params.set("startDate", filters.startDate);
   if (filters.endDate) params.set("endDate", filters.endDate);
+  if (filters.uncategorized) params.set("uncategorized", "1");
+  if (filters.untagged) params.set("untagged", "1");
   for (const id of filters.categoryIds ?? []) {
     if (id) params.append("categoryId", id);
   }

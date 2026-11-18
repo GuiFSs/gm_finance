@@ -39,6 +39,8 @@ const PAYMENT_LABEL: Record<string, string> = {
 const defaultFilters = {
   categoryIds: [] as string[],
   tagIds: [] as string[],
+  uncategorized: false,
+  untagged: false,
   userId: "",
   startDate: "",
   endDate: "",
@@ -56,6 +58,8 @@ function filtersFromSearchParams(params: URLSearchParams): typeof defaultFilters
     ...defaultFilters,
     categoryIds: categoryId ? [categoryId] : [],
     tagIds: tagId ? [tagId] : [],
+    uncategorized: params.get("uncategorized") === "1",
+    untagged: params.get("untagged") === "1",
     startDate: YMD.test(startDate) ? startDate : "",
     endDate: YMD.test(endDate) ? endDate : "",
   };
@@ -275,6 +279,8 @@ export function PurchaseList() {
   const purchases = usePurchases({
     categoryIds: filters.categoryIds.length ? filters.categoryIds : undefined,
     tagIds: filters.tagIds.length ? filters.tagIds : undefined,
+    uncategorized: filters.uncategorized || undefined,
+    untagged: filters.untagged || undefined,
     userId: filters.userId || undefined,
     startDate: filters.startDate || undefined,
     endDate: filters.endDate || undefined,
@@ -309,7 +315,9 @@ export function PurchaseList() {
     const labels: string[] = [];
     const catName = new Map((categories.data ?? []).map((c) => [c.id, c.name]));
     const tagName = new Map((tags.data ?? []).map((t) => [t.id, t.name]));
+    if (filters.uncategorized) labels.push("sem categoria");
     for (const id of filters.categoryIds) labels.push(catName.get(id) ?? "categoria");
+    if (filters.untagged) labels.push("sem tag");
     for (const id of filters.tagIds) labels.push(`#${tagName.get(id) ?? "tag"}`);
     if (filters.userId) labels.push((users.data ?? []).find((u) => u.id === filters.userId)?.name ?? "usuário");
     if (filters.startDate || filters.endDate) {
@@ -458,7 +466,9 @@ export function PurchaseList() {
                 clearLabel="Limpar categorias"
                 options={(categories.data ?? []).map((item) => ({ id: item.id, name: item.name }))}
                 selectedIds={filters.categoryIds}
-                onChange={(categoryIds) => setFilters((prev) => ({ ...prev, categoryIds }))}
+                onChange={(categoryIds) =>
+                  setFilters((prev) => ({ ...prev, categoryIds, uncategorized: categoryIds.length ? false : prev.uncategorized }))
+                }
               />
               <MultiEntityFilter
                 label="Tags"
@@ -466,7 +476,9 @@ export function PurchaseList() {
                 clearLabel="Limpar tags"
                 options={(tags.data ?? []).map((item) => ({ id: item.id, name: item.name }))}
                 selectedIds={filters.tagIds}
-                onChange={(tagIds) => setFilters((prev) => ({ ...prev, tagIds }))}
+                onChange={(tagIds) =>
+                  setFilters((prev) => ({ ...prev, tagIds, untagged: tagIds.length ? false : prev.untagged }))
+                }
               />
               <div className="space-y-1.5">
                 <Label htmlFor="filter-user">Quem lançou</Label>

@@ -439,8 +439,16 @@ function CategorySection({
   /** Período que o filtro de compras recebe: o mês da tela (ou o mês tocado no ano) ou o ano. */
   const rowPeriod = yearMode ? ((showMonths ? columnMonth : focusMonth) ?? year) : month;
 
-  const openPurchases = (target: { category?: string; tag?: string; period: string }) => {
+  const openPurchases = (target: {
+    category?: string;
+    tag?: string;
+    uncategorized?: boolean;
+    untagged?: boolean;
+    period: string;
+  }) => {
     const params = new URLSearchParams(periodDateRange(target.period));
+    if (target.uncategorized) params.set("uncategorized", "1");
+    if (target.untagged) params.set("untagged", "1");
     if (target.category) {
       const categoryId = categoryOptions.data?.find((item) => item.name === target.category)?.id;
       if (!categoryId) return;
@@ -454,9 +462,21 @@ function CategorySection({
     router.push(`/purchases?${params.toString()}`);
   };
 
-  /** Categoria abre as compras; a tag também, já dentro da categoria. "sem categoria"/"sem tag" não filtram. */
+  /** Categoria abre as compras; a tag também, já dentro da categoria. */
   const rowLinks = (row: CategorySlice): RowLinks => {
-    if (row.name === UNCATEGORIZED_LABEL || row.name === UNTAGGED_LABEL) return {};
+    if (row.name === UNCATEGORIZED_LABEL) {
+      return { onOpen: () => openPurchases({ uncategorized: true, period: rowPeriod }) };
+    }
+    if (row.name === UNTAGGED_LABEL) {
+      return {
+        onOpen: () =>
+          openPurchases({
+            category: selected && selected !== UNCATEGORIZED_LABEL ? selected : undefined,
+            untagged: true,
+            period: rowPeriod,
+          }),
+      };
+    }
     if (selected) return { onOpen: () => openPurchases({ category: selected, tag: row.name, period: rowPeriod }) };
     return {
       onOpen: () => openPurchases({ category: row.name, period: rowPeriod }),
