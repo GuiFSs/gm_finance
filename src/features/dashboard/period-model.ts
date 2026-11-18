@@ -16,6 +16,14 @@ export function yearMonthParams(year: number): string[] {
   return Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
 }
 
+/** Intervalo de datas inclusivo de um mês (`YYYY-MM`) ou de um ano (`YYYY`). */
+export function periodDateRange(period: string): { startDate: string; endDate: string } {
+  if (/^\d{4}$/.test(period)) return { startDate: `${period}-01-01`, endDate: `${period}-12-31` };
+  const [year, month] = period.split("-").map(Number) as [number, number];
+  const lastDay = new Date(year, month, 0).getDate();
+  return { startDate: `${period}-01`, endDate: `${period}-${String(lastDay).padStart(2, "0")}` };
+}
+
 export function monthAbbrev(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
   if (!y || !m) return ym;

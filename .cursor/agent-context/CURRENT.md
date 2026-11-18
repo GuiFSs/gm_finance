@@ -1,6 +1,6 @@
 # Contexto atual (agentes)
 
-> Atualizado: 2026-11-17 — sidecar do design regenerado; doctor sem achados.
+> Atualizado: 2026-11-17 — dashboard abre compras filtradas por categoria/tag; compras ganhou ocultar valor total.
 
 ## Status
 
@@ -8,74 +8,50 @@
 
 ## Objetivo recente
 
-Com dashboard, movimentos e compras já no visual novo, o usuário pediu o mesmo nas outras telas: orçamento, categorias, caixinhas, cartões, recorrentes, metas, depósitos e login, além dos diálogos compartilhados. Cada tela com dinheiro ganhou uma barra de planos própria. A revisão final (impeccable-finish-reviewer) deu `ship`.
+Dois pedidos do usuário na tela de compras e no dashboard:
+
+1. Tocar numa categoria ou tag no dashboard abre `/purchases` já filtrada. O período acompanha o mês da tela. No ano, o mês tocado no gráfico "por mês" vale; sem toque, o ano inteiro.
+2. Compras ganhou um botão de olho para mostrar/ocultar o valor total. Começa escondido a cada visita.
 
 ## O que mudou
 
-- `src/shared/ui/*` — os primitivos shadcn foram reestilizados: 15px, cantos retos, sem sombra.
-  - `button` agora tem 40px. O disabled do default vira contorno apagado.
-  - `input` e `select` têm 40px.
-  - Título do `dialog`/`sheet` com 24px bold lowercase, o fechar é um quadrado de 40px e o `DialogContent` usa `grid-cols-[minmax(0,1fr)]` (corrige overflow no mobile).
-  - O `modal` aceita `title: ReactNode`.
-  - `dropdown-menu.tsx` foi instalado (shadcn) e reestilizado.
-- `src/shared/ui/page-header.tsx` — exporta `PageHeader`, `Field` (label, hint, erro) e `FormActions`. No mobile do `FormActions`, cancelar e salvar ficam lado a lado e o destrutivo fica embaixo. Do `sm` para cima, o destrutivo vai para a esquerda.
-- `src/features/month/plane-bar.tsx` (novo) — `PlaneBar` (tamanhos `sm|md|lg`; segmento com `fill` interno; `onSelect`) e `PlaneLegend`. A legenda descarta item com `value` zero e usa uma coluna quando tem um item só.
-- `src/features/month/ledger.tsx` — novos `AnswerFigure`, `LedgerGroup` e `LedgerSkeleton`.
-- `src/app/(protected)/*/page.tsx` — as rotas só renderizam o componente da feature.
-- **Caixinhas** (`features/pockets/pocket-management.tsx`): figura "guardado nas caixinhas". Plano azul por caixinha, e o tile de cada linha mostra a fatia em %. A linha abre a edição, e o saldo aceita valor negativo.
-- **Cartões** (`features/cards/card-management.tsx`): figura "livre nos cartões", ou "passou do limite dos cartões" quando negativa. Cada cartão tem um plano usado/livre ou usado/excedido. Botões "pagar fatura" e "editar".
-- **Pagar fatura** (`card-statement-funding-modal.tsx`):
-  - O `MonthSwitcher` substituiu o input de mês.
-  - Os meses já planejados viraram `Button` shadcn.
-  - Novo plano por fonte.
-  - "remover plano deste mês" só aparece se houver plano.
-- **Metas** (`features/goals/goal-management.tsx`, reescrito): figura "falta guardar". Cada meta tem um plano guardado/falta e o valor mensal até o prazo.
-- **Categorias**: lista ordenada. Tocar a linha renomeia; a lixeira exclui.
-- **Recorrentes**:
-  - As abas foram removidas e a lista vai por próxima data.
-  - Figura "fixo por mês", com um plano por item colorido pelo vencimento.
-  - "Executar agora" virou "lançar vencidos".
-  - Excluir fica dentro do modal de edição.
-- **Depósitos** (`deposit-management.tsx`, reescrito com a lógica preservada):
-  - Novo `SplitEditor` (R$/%, com prévia do plano).
-  - Figura "entrou em {mês}" com plano por destino.
-  - Toggle "avulsos | recorrentes".
-  - Excluir fica dentro do modal.
-- **Orçamento**:
-  - `budget-planner.tsx`: figura "livre no plano", com um plano por categoria e o gasto preenchido. Tocar um segmento rola até a linha. O plano não aparece quando o mês está vazio. "copiar de {mês}" só aparece no estado vazio, e a barra sticky ficou só com Salvar.
-  - `budget-allocation-rows.tsx`: cada linha tem uma mini-barra (planejado × gasto) e o texto "gasto X". "usar o restante" e "dividir em tags" ficam num `DropdownMenu` (…).
-  - `category-picker-field`/`tag-picker-field`: "+ nova categoria/tag" virou a última opção do select.
-- **Login** (`features/auth/login-form.tsx`): "g&m" em 48px. Toggle de duas pessoas no lugar do select e PIN numérico. O toast de boas-vindas saiu.
-- **Detalhe da compra** (`purchase-detail-dialog.tsx`):
-  - O título é o nome da compra.
-  - As parcelas são `LedgerRow`.
-  - O meta da parcela ficou "fatura nov/26 · vence 25/11".
-- `enable-push.tsx`, `voice-command-fab.tsx`, filtro em `purchase-list.tsx` — passaram para 15px e tinta vermelha de texto.
-- `src/app/globals.css` — esconde os spinners de `input[type=number]`.
-- `DESIGN.md` — o escopo de evidência agora cobre todas as rotas. Novas seções: Dialogs and Forms, Answer Figure e Route Planes. Também foram atualizados disabled, inputs e toggle.
+- `src/features/dashboard/dashboard-overview.tsx` (`CategorySection`):
+  - Tocar a linha ou a fatia de uma categoria chama `openPurchases`, que faz `router.push('/purchases?categoryId=…&startDate=…&endDate=…')`.
+  - Tocar uma tag (dentro da categoria aberta) envia `categoryId` + `tagId`.
+  - Os ids são resolvidos por nome em `useCategories()` / `useTags()`. Nomes são únicos no schema. Se a lista ainda não carregou, o clique não faz nada.
+  - "sem categoria" e "sem tag" não são clicáveis: a API não filtra por "sem".
+  - O drill-down para as tags continua acessível pelo botão "tags" de cada linha de categoria (`SpendRow` agora tem `onOpen` e `onDrill`).
+  - `rowLinks` e `openSlice` ligam linhas e pizza. `CategoryColumns` recebe `rowLinks` no lugar de `onPick`.
+- `src/features/dashboard/period-model.ts` — `periodDateRange(period)`: `YYYY-MM` vira o intervalo do mês, `YYYY` vira o ano (inclusivo).
+- `src/features/purchases/purchase-list.tsx`:
+  - `filtersFromSearchParams` lê `categoryId`, `tagId`, `startDate`, `endDate` da URL no estado inicial dos filtros.
+  - `showTotals` (padrão `false`): o total do topo vira `R$ •••••` e o total de cada mês vira `•••••`. O valor de cada compra continua visível.
 
 ## Decisões
 
-- O número negativo da figura continua na tinta vermelha (`text-ink-out`), porque o DESIGN.md permite isso para déficit. Já o rótulo muda para dizer que passou ("passou do limite…"), em vez de "livre" com valor negativo.
-- A barra tem uma cor por significado: vermelho saiu/usado, amarelo vence em até 2 dias, azul entrou/guardado/livre. Contorno é previsto. Listras são excesso.
-- Ações destrutivas ficam dentro do modal de edição (menos em categorias). Confirmar a exclusão fecha os dois modais.
-- O shadcn MCP estava fora do ar, então `dropdown-menu` foi instalado com `npx shadcn@latest add dropdown-menu`.
+- Clique em categoria navega; o drill-down virou o botão "tags". Motivo: o pedido era que o clique abrisse compras, e as tags precisavam continuar acessíveis.
+- Tag filtra por categoria **e** tag, para bater com o número que a fatia mostra.
+- Período sem mês no ano = ano inteiro (`startDate`/`endDate`), para o total da lista bater com o da categoria no ano.
+- "Ocultar valor" é só estado de tela, não persiste (volta escondido a cada visita), como pedido.
+- Ocultar valor cobre só agregados (total do topo e total por mês). Valores individuais de cada compra não foram escondidos. Se o usuário quiser esconder esses também, é mudança pequena em `PurchaseRowItem`.
 
 ## Ainda aberto / próximo passo
 
-- [ ] Commitar o que ficou depois do `5ecb210`: `.impeccable/design.json` (sidecar alinhado ao DESIGN.md) e `.impeccable/config.json` (`buildPath: code`)
-- [ ] Lint: os erros antigos de `react-hooks/set-state-in-effect` em `budget-planner.tsx`, `card-statement-funding-modal.tsx` e `purchase-list.tsx` continuam lá
-- [ ] Smoke no banco real: marcar/desmarcar Pago em `/movements`. Criar, editar e excluir em caixinhas, recorrentes, depósitos e metas (os prints usaram metas mockadas, porque o banco não tem nenhuma)
+- [ ] Smoke no navegador: tocar categoria (pizza e linha), tag, e "por mês" no ano; confirmar o chip de filtro e o período na tela de compras
+- [ ] Commitar e dar push em `main` (feito ao final desta entrega; ver LOG)
+- [ ] Lint: `react-hooks/set-state-in-effect` no effect de `edit`/`new` em `purchase-list.tsx` e `exhaustive-deps` na linha `const list` — já existiam antes
+- [ ] Lint: os erros antigos de `react-hooks/set-state-in-effect` em `budget-planner.tsx`, `card-statement-funding-modal.tsx` continuam lá
+- [ ] Smoke no banco real: marcar/desmarcar Pago em `/movements`. Criar, editar e excluir em caixinhas, recorrentes, depósitos e metas
 - [ ] Pendência anterior: confirmar a migração `0014_expense_payments` no Turso de **produção**
 
 ## Como validar
 
 1. `npx tsc --noEmit` limpo
-2. Em 390px, abrir cada rota. Não pode haver overflow horizontal, e a figura e o plano aparecem no topo.
-3. `/budgets`: em setembro (que tem plano), cada linha tem uma mini-barra; o menu "…" mostra "usar o restante"/"dividir em tags", e o select tem "+ nova categoria" no fim.
-4. `/cards`: o botão "pagar fatura" abre o modal. Em maio (mês com plano), "remover plano deste mês" aparece.
-5. Prints de referência em `.impeccable/review/routes/`
+2. `npx eslint src/features/dashboard src/features/purchases` — só os itens de lint acima
+3. No dashboard, mês: tocar categoria → `/purchases` com o chip da categoria e o intervalo do mês. Tocar tag → chip da categoria + tag.
+4. No dashboard, ano, aba "por mês": tocar um mês e depois uma categoria → período = aquele mês. Sem tocar em mês (aba pizza) → ano inteiro.
+5. `/purchases`: total escondido por padrão; o olho mostra o total e os totais por mês.
 
 ## Áreas tocadas
 
-`src/shared/ui/`, `src/features/{pockets,cards,goals,categories,recurring,deposits,budgets,auth,purchases,notifications,voice,month}/`, `src/app/(protected)/`, `src/app/globals.css`, `DESIGN.md`, `.cursor/agent-context/`
+`src/features/dashboard/`, `src/features/purchases/`, `.cursor/agent-context/`

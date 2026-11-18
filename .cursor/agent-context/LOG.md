@@ -2,6 +2,13 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-17 — dashboard abre compras filtradas; ocultar total em compras
+
+- Status: `pronto-para-revisar`
+- Resumo: Tocar categoria ou tag no dashboard abre `/purchases` filtrada (período = mês da tela; no ano, mês tocado ou ano inteiro). Botão "tags" mantém o drill-down. Compras ganhou olho para ocultar o total (escondido por padrão).
+- Arquivos-chave: `src/features/dashboard/dashboard-overview.tsx`, `src/features/dashboard/period-model.ts`, `src/features/purchases/purchase-list.tsx`
+- Próximo: smoke no navegador do fluxo dashboard → compras; commit/push em `main`
+
 ## 2026-11-17 — sidecar do design alinhado
 
 - Status: `pronto-para-revisar`

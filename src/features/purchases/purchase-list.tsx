@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsUpDown, ListFilter, Plus, X } from "lucide-react";
+import { ChevronsUpDown, Eye, EyeOff, ListFilter, Plus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -43,6 +43,23 @@ const defaultFilters = {
   startDate: "",
   endDate: "",
 };
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Filtros vindos da URL, ex.: ao tocar numa categoria ou tag no dashboard. */
+function filtersFromSearchParams(params: URLSearchParams): typeof defaultFilters {
+  const categoryId = params.get("categoryId");
+  const tagId = params.get("tagId");
+  const startDate = params.get("startDate") ?? "";
+  const endDate = params.get("endDate") ?? "";
+  return {
+    ...defaultFilters,
+    categoryIds: categoryId ? [categoryId] : [],
+    tagIds: tagId ? [tagId] : [],
+    startDate: YMD.test(startDate) ? startDate : "",
+    endDate: YMD.test(endDate) ? endDate : "",
+  };
+}
 
 type EntityOption = { id: string; name: string };
 
@@ -235,7 +252,7 @@ function PurchaseRowItem({ g, onOpen }: { g: PurchaseGroup; onOpen: () => void }
 export function PurchaseList() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useState(() => filtersFromSearchParams(searchParams));
   const [openPurchaseModal, setOpenPurchaseModal] = useState(false);
   const [editPurchaseId, setEditPurchaseId] = useState<string | null>(null);
   const [openCategoryModal, setOpenCategoryModal] = useState(false);
@@ -243,6 +260,8 @@ export function PurchaseList() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<PurchaseSortKey>("date_desc");
+  /** Valores agregados (total e total por mês) ficam escondidos a cada visita. */
+  const [showTotals, setShowTotals] = useState(false);
 
   const editFromUrl = searchParams.get("edit");
   const newFromUrl = searchParams.get("new");
@@ -395,11 +414,25 @@ export function PurchaseList() {
       <header className="flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-bold lowercase leading-none tracking-tight text-foreground">compras</h1>
       </header>
-      <p className="mt-2 text-[15px] text-muted-foreground tabular-nums">
-        {isLoading
-          ? "Carregando…"
-          : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} · ${formatCurrency(total)}`}
-      </p>
+      <div className="mt-2 flex items-center gap-1 text-[15px] text-muted-foreground tabular-nums">
+        <span>
+          {isLoading
+            ? "Carregando…"
+            : `${grouped.length} ${grouped.length === 1 ? "compra" : "compras"} · ${showTotals ? formatCurrency(total) : "R$ •••••"}`}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground"
+          onClick={() => setShowTotals((value) => !value)}
+          aria-label={showTotals ? "Ocultar valor total" : "Mostrar valor total"}
+          aria-pressed={showTotals}
+          disabled={isLoading}
+        >
+          {showTotals ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+        </Button>
+      </div>
 
       <div className="sticky top-0 z-20 -mx-4 mt-4 flex items-center gap-2 border-b border-border bg-background px-4 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:-mx-6 sm:px-6 md:static md:mx-0 md:px-0 md:pt-2">
         <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -543,7 +576,9 @@ export function PurchaseList() {
           <section key={m.month} className="pt-8">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-2xl font-bold lowercase leading-tight tracking-tight text-foreground">{monthLabel(m.month)}</h2>
-              <span className="text-[15px] font-medium tabular-nums text-foreground">{formatAmount(m.total, "−")}</span>
+              <span className="text-[15px] font-medium tabular-nums text-foreground">
+                {showTotals ? formatAmount(m.total, "−") : "•••••"}
+              </span>
             </div>
             <div className="mt-2 border-t-2 border-foreground">
               {m.items.map((g) => (

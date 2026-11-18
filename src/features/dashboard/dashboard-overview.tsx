@@ -7,6 +7,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  UNCATEGORIZED_LABEL,
+  UNTAGGED_LABEL,
   categorySlicesFromMovements,
   monthlyGroups,
   sharePercents,
@@ -15,7 +17,13 @@ import {
   type MonthGroup,
 } from "@/features/dashboard/category-spend";
 import { FlatPie } from "@/features/dashboard/flat-pie";
-import { monthAbbrev, sumMonthTotals, yearColumns, yearMonthParams } from "@/features/dashboard/period-model";
+import {
+  monthAbbrev,
+  periodDateRange,
+  sumMonthTotals,
+  yearColumns,
+  yearMonthParams,
+} from "@/features/dashboard/period-model";
 import { PeriodColumns } from "@/features/dashboard/period-chart";
 import { useYearMovements } from "@/features/dashboard/use-period-data";
 import { MonthSwitcher, SectionHeading } from "@/features/month/ledger";
@@ -29,11 +37,13 @@ import {
 import { MonthPlane } from "@/features/month/month-plane";
 import { EnablePushCard } from "@/features/notifications/enable-push";
 import {
+  useCategories,
   useCreateAdjustment,
   useCurrentUser,
   useDashboard,
   useMonthlyBudget,
   useMonthMovements,
+  useTags,
   type MonthMovementRow,
 } from "@/shared/hooks/use-app-data";
 import { cn } from "@/shared/lib/cn";
@@ -401,7 +411,10 @@ function CategorySection({
   loading: boolean;
   error: boolean;
 }) {
+  const router = useRouter();
   const budget = useMonthlyBudget(yearMode ? null : month);
+  const categoryOptions = useCategories();
+  const tagOptions = useTags();
   const [picked, setPicked] = useState<string | null>(null);
   const [chart, setChart] = useState<"pizza" | "meses">("pizza");
   const [focus, setFocus] = useState<string | null>(null);
@@ -417,6 +430,43 @@ function CategorySection({
   }, [yearMode, months, lists, rows, selected]);
   const summary = rows.map((row) => `${row.name} ${row.percent}%`).join(", ");
   const showMonths = yearMode && chart === "meses";
+
+  const year = month.slice(0, 4);
+  /** Mês aberto na lista "por mês" (o tocado no gráfico, ou o da tela). */
+  const columnMonth = [focus, month].find((value) => value && byMonth.some((group) => group.month === value)) ?? byMonth.at(-1)?.month;
+  /** Mês tocado no gráfico do ano. Sem toque, o período é o ano inteiro. */
+  const focusMonth = focus?.startsWith(year) ? focus : null;
+  /** Período que o filtro de compras recebe: o mês da tela (ou o mês tocado no ano) ou o ano. */
+  const rowPeriod = yearMode ? ((showMonths ? columnMonth : focusMonth) ?? year) : month;
+
+  const openPurchases = (target: { category?: string; tag?: string; period: string }) => {
+    const params = new URLSearchParams(periodDateRange(target.period));
+    if (target.category) {
+      const categoryId = categoryOptions.data?.find((item) => item.name === target.category)?.id;
+      if (!categoryId) return;
+      params.set("categoryId", categoryId);
+    }
+    if (target.tag) {
+      const tagId = tagOptions.data?.find((item) => item.name === target.tag)?.id;
+      if (!tagId) return;
+      params.set("tagId", tagId);
+    }
+    router.push(`/purchases?${params.toString()}`);
+  };
+
+  /** Categoria abre as compras; a tag também, já dentro da categoria. "sem categoria"/"sem tag" não filtram. */
+  const rowLinks = (row: CategorySlice): RowLinks => {
+    if (row.name === UNCATEGORIZED_LABEL || row.name === UNTAGGED_LABEL) return {};
+    if (selected) return { onOpen: () => openPurchases({ category: selected, tag: row.name, period: rowPeriod }) };
+    return {
+      onOpen: () => openPurchases({ category: row.name, period: rowPeriod }),
+      onDrill: () => setPicked(row.name),
+    };
+  };
+  const openSlice = (name: string) => {
+    const row = rows.find((item) => item.name === name);
+    if (row) rowLinks(row).onOpen?.();
+  };
 
   return (
     <section aria-labelledby="categories-heading" className="md:pr-20">
@@ -468,23 +518,18 @@ function CategorySection({
           Nenhum gasto {yearMode ? "neste ano" : "neste mês"}.
         </p>
       ) : showMonths ? (
-        <CategoryColumns
-          groups={byMonth}
-          active={[focus, month].find((value) => value && byMonth.some((group) => group.month === value)) ?? byMonth.at(-1)?.month}
-          onSelect={setFocus}
-          onPick={selected ? undefined : setPicked}
-        />
+        <CategoryColumns groups={byMonth} active={columnMonth} onSelect={setFocus} rowLinks={rowLinks} />
       ) : (
         <div className="flex flex-col gap-6 border-t border-border pt-6 sm:flex-row sm:items-start">
           <FlatPie
             slices={rows.map((row) => ({ key: row.name, value: row.spent, fill: row.color }))}
             label={summary}
-            onSelect={selected ? undefined : setPicked}
+            onSelect={openSlice}
           />
           <ul className="min-w-0 flex-1">
             {rows.map((row) => (
               <li key={row.name}>
-                <SpendRow row={row} onPick={selected ? undefined : setPicked} />
+                <SpendRow row={row} {...rowLinks(row)} />
               </li>
             ))}
           </ul>
@@ -507,8 +552,10 @@ function SliceLabel({ row }: { row: CategorySlice }) {
   );
 }
 
-function SpendRow({ row, onPick }: { row: CategorySlice; onPick?: (name: string) => void }) {
-  if (!onPick) {
+type RowLinks = { onOpen?: () => void; onDrill?: () => void };
+
+function SpendRow({ row, onOpen, onDrill }: { row: CategorySlice } & RowLinks) {
+  if (!onOpen) {
     return (
       <div className="flex min-h-12 items-center gap-3 border-t border-border py-2">
         <SliceLabel row={row} />
@@ -516,13 +563,20 @@ function SpendRow({ row, onPick }: { row: CategorySlice; onPick?: (name: string)
     );
   }
   return (
-    <button
-      type="button"
-      onClick={() => onPick(row.name)}
-      className="flex min-h-12 w-full items-center gap-3 border-t border-border py-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    >
-      <SliceLabel row={row} />
-    </button>
+    <div className="flex min-h-12 items-center gap-1 border-t border-border">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-h-12 min-w-0 flex-1 items-center gap-3 py-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <SliceLabel row={row} />
+      </button>
+      {onDrill ? (
+        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-muted-foreground" onClick={onDrill}>
+          tags
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -530,12 +584,12 @@ function CategoryColumns({
   groups,
   active,
   onSelect,
-  onPick,
+  rowLinks,
 }: {
   groups: MonthGroup[];
   active?: string;
   onSelect: (month: string) => void;
-  onPick?: (name: string) => void;
+  rowLinks: (row: CategorySlice) => RowLinks;
 }) {
   const totals = groups.map((group) => group.slices.reduce((sum, slice) => sum + slice.spent, 0));
   const max = Math.max(0, ...totals);
@@ -584,7 +638,7 @@ function CategoryColumns({
             <ul>
               {open.slices.map((row) => (
                 <li key={row.name}>
-                  <SpendRow row={row} onPick={onPick} />
+                  <SpendRow row={row} {...rowLinks(row)} />
                 </li>
               ))}
             </ul>
