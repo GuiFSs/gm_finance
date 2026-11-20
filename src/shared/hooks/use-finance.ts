@@ -97,6 +97,10 @@ export type PurchasesQuery = {
   tagIds?: string[];
   uncategorized?: boolean;
   untagged?: boolean;
+  /** Tipo do meio de pagamento (conta, caixinha ou cartão). */
+  paymentSourceType?: "account" | "pocket" | "card";
+  /** Caixinha ou cartão específico (não usar com conta). */
+  paymentSourceId?: string;
   userId?: string;
   startDate?: string;
   endDate?: string;
@@ -109,6 +113,8 @@ export function usePurchases(filters: PurchasesQuery) {
   if (filters.endDate) params.set("endDate", filters.endDate);
   if (filters.uncategorized) params.set("uncategorized", "1");
   if (filters.untagged) params.set("untagged", "1");
+  if (filters.paymentSourceType) params.set("paymentSourceType", filters.paymentSourceType);
+  if (filters.paymentSourceId) params.set("paymentSourceId", filters.paymentSourceId);
   for (const id of filters.categoryIds ?? []) {
     if (id) params.append("categoryId", id);
   }
@@ -186,12 +192,72 @@ export function useCreatePocket() {
 export function useUpdatePocket() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { id: string; name: string; description?: string | null }) =>
+    mutationFn: (payload: { id: string; name: string; description?: string | null; categoryId?: string | null }) =>
       fetcher(`/api/pockets/${payload.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: payload.name, description: payload.description }),
+        body: JSON.stringify({
+          name: payload.name,
+          description: payload.description,
+          categoryId: payload.categoryId ?? null,
+        }),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pockets"] }),
+  });
+}
+
+export function useDeletePocket() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetcher(`/api/pockets/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function usePocketCategories() {
+  return useQuery({
+    queryKey: ["pocket-categories"],
+    queryFn: () => fetcher<{ data: NamedEntity[] }>("/api/pocket-categories"),
+    select: (response) => response.data,
+  });
+}
+
+export function useCreatePocketCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      fetcher<{ data: NamedEntity }>("/api/pocket-categories", { method: "POST", body: JSON.stringify(payload) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pocket-categories"] }),
+  });
+}
+
+export function useUpdatePocketCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; name: string }) =>
+      fetcher<{ data: NamedEntity }>(`/api/pocket-categories/${payload.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: payload.name }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pocket-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
+    },
+  });
+}
+
+export function useDeletePocketCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetcher<{ data: { id: string } }>(`/api/pocket-categories/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pocket-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["pockets"] });
+    },
   });
 }
 
@@ -688,6 +754,7 @@ export function useCreateAdjustment() {
       fetcher("/api/adjustments", { method: "POST", body: JSON.stringify(payload) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
       queryClient.invalidateQueries({ queryKey: ["pockets"] });
     },
   });
@@ -763,7 +830,14 @@ export type PurchaseRow = {
   tags: string[];
   tagIds?: string[];
 };
-type PocketRow = { id: string; name: string; description: string | null; balance: number };
+export type PocketRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  balance: number;
+};
 type CardRow = {
   id: string;
   name: string;

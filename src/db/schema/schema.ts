@@ -22,10 +22,20 @@ export const users = sqliteTable("users", {
     .default(sql`(unixepoch() * 1000)`),
 });
 
+/** Categorias só de caixinhas (separadas das categorias de compras). */
+export const pocketCategories = sqliteTable("pocket_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  createdByUserId: text("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+});
+
 export const pockets = sqliteTable("pockets", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
   description: text("description"),
+  categoryId: text("category_id").references(() => pocketCategories.id, { onDelete: "set null" }),
   createdByUserId: text("created_by_user_id")
     .notNull()
     .references(() => users.id),

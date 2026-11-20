@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { db, schema } from "@/db";
 import { jsonError, parseBody } from "@/shared/lib/api";
 import { requireApiSession } from "@/shared/lib/api-auth";
-import { getPocketBalances } from "@/shared/lib/finance-service";
+import { assertPocketCategoryExists, getPocketBalances } from "@/shared/lib/finance-service";
 import { createPocketSchema } from "@/shared/lib/schemas";
 
 export async function GET() {
@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = parseBody(createPocketSchema, await request.json());
+    await assertPocketCategoryExists(body.categoryId);
     const pocketId = crypto.randomUUID();
     const today = format(new Date(), "yyyy-MM-dd");
 
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
         id: pocketId,
         name: body.name,
         description: body.description,
+        categoryId: body.categoryId || null,
         createdByUserId: body.createdByUserId,
       })
       .returning();

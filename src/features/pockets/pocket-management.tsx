@@ -11,11 +11,14 @@ import {
   useCreateAdjustment,
   useCreatePocket,
   useCurrentUser,
+  useDeletePocket,
+  usePocketCategories,
   usePockets,
   useTransferToPocket,
   useUpdatePocket,
+  type PocketRow,
 } from "@/shared/hooks/use-app-data";
-import { AnswerFigure, LedgerRow, LedgerSkeleton } from "@/features/month/ledger";
+import { AnswerFigure, LedgerGroup, LedgerRow, LedgerSkeleton } from "@/features/month/ledger";
 import { formatAmount } from "@/features/month/month-model";
 import { PlaneBar } from "@/features/month/plane-bar";
 import { toInputDate, formatCurrency } from "@/shared/utils/formatters";
@@ -30,6 +33,7 @@ import { SelectOptions } from "@/shared/ui/select-options";
 const pocketSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  categoryId: z.string().optional(),
   initialAmount: z.number().min(0).default(0),
 });
 
@@ -65,22 +69,27 @@ const transferSchema = z
 const editPocketSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  categoryId: z.string().optional(),
   newBalance: z.number(),
 });
 
 type EditPocketValues = z.infer<typeof editPocketSchema>;
 
+type EditingPocket = Pick<PocketRow, "id" | "name" | "description" | "categoryId" | "balance">;
+
 export function PocketManagement() {
   const currentUser = useCurrentUser();
   const pockets = usePockets();
+  const pocketCategories = usePocketCategories();
   const createPocket = useCreatePocket();
   const updatePocket = useUpdatePocket();
+  const deletePocket = useDeletePocket();
   const createAdjustment = useCreateAdjustment();
   const transferToPocket = useTransferToPocket();
 
   const pocketForm = useForm<PocketFormValues>({
     resolver: zodResolver(pocketSchema) as Resolver<PocketFormValues>,
-    defaultValues: { name: "", description: "", initialAmount: 0 },
+    defaultValues: { name: "", description: "", categoryId: "", initialAmount: 0 },
   });
 
   const transferForm = useForm<z.infer<typeof transferSchema>>({
@@ -99,30 +108,31 @@ export function PocketManagement() {
 
   const [openCreatePocket, setOpenCreatePocket] = useState(false);
   const [openTransfer, setOpenTransfer] = useState(false);
-  const [editingPocket, setEditingPocket] = useState<{
-    id: string;
-    name: string;
-    description: string | null;
-    balance: number;
-  } | null>(null);
+  const [editingPocket, setEditingPocket] = useState<EditingPocket | null>(null);
+  const [deletingPocket, setDeletingPocket] = useState<EditingPocket | null>(null);
 
   const editForm = useForm<EditPocketValues>({
     resolver: zodResolver(editPocketSchema),
-    defaultValues: { name: "", description: "", newBalance: 0 },
+    defaultValues: { name: "", description: "", categoryId: "", newBalance: 0 },
   });
 
   const onCreatePocket = pocketForm.handleSubmit(async (values) => {
     if (!currentUser.data?.id) return;
     const initialAmount = Number.isFinite(values.initialAmount) ? values.initialAmount : 0;
-    await createPocket.mutateAsync({
-      name: values.name,
-      description: values.description ?? undefined,
-      initialAmount,
-      createdByUserId: currentUser.data.id,
-    });
-    pocketForm.reset();
-    toast.success("Caixinha criada");
-    setOpenCreatePocket(false);
+    try {
+      await createPocket.mutateAsync({
+        name: values.name,
+        description: values.description ?? undefined,
+        categoryId: values.categoryId || null,
+        initialAmount,
+        createdByUserId: currentUser.data.id,
+      });
+      pocketForm.reset();
+      toast.success("Caixinha criada");
+      setOpenCreatePocket(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível criar a caixinha.");
+    }
   });
 
   const onTransfer = transferForm.handleSubmit(async (values) => {
@@ -148,23 +158,25 @@ export function PocketManagement() {
     setOpenTransfer(false);
   });
 
-  const openEdit = (pocket: { id: string; name: string; description: string | null; balance: number }) => {
+  const openEdit = (pocket: EditingPocket) => {
     setEditingPocket(pocket);
     editForm.reset({
       name: pocket.name,
       description: pocket.description ?? "",
+      categoryId: pocket.categoryId ?? "",
       newBalance: pocket.balance,
     });
   };
 
   const onEditPocket = editForm.handleSubmit(async (values) => {
     if (!currentUser.data?.id || !editingPocket) return;
-    const { name, description, newBalance } = values;
+    const { name, description, categoryId, newBalance } = values;
     try {
       await updatePocket.mutateAsync({
         id: editingPocket.id,
         name,
         description: description || null,
+        categoryId: categoryId || null,
       });
       const balanceDelta = newBalance - editingPocket.balance;
       if (Math.abs(balanceDelta) > 1e-6) {
@@ -183,6 +195,18 @@ export function PocketManagement() {
       toast.error(e instanceof Error ? e.message : "Não foi possível salvar a caixinha.");
     }
   });
+
+  const onConfirmDelete = async () => {
+    if (!deletingPocket) return;
+    try {
+      await deletePocket.mutateAsync(deletingPocket.id);
+      toast.success("Caixinha excluída");
+      setDeletingPocket(null);
+      setEditingPocket(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível excluir a caixinha.");
+    }
+  };
 
   const openTransfer_ = () => {
     transferForm.reset({
@@ -203,7 +227,73 @@ export function PocketManagement() {
     { value: "", label: "Selecione a caixinha" },
     ...list.map((p) => ({ value: p.id, label: p.name })),
   ];
+  const categoryOptions = [
+    { value: "", label: "Sem categoria" },
+    ...(pocketCategories.data ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ];
   const transferErrors = transferForm.formState.errors;
+
+  /** Agrupa por categoria de caixinha. Sem nenhuma categoria cadastrada, a lista fica plana. */
+  const groups = useMemo(() => {
+    const cats = [...(pocketCategories.data ?? [])].sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }),
+    );
+    const known = new Set(cats.map((c) => c.id));
+    const byCategory = new Map<string, PocketRow[]>();
+    const uncategorized: PocketRow[] = [];
+    for (const p of list) {
+      if (p.categoryId && known.has(p.categoryId)) {
+        byCategory.set(p.categoryId, [...(byCategory.get(p.categoryId) ?? []), p]);
+      } else {
+        uncategorized.push(p);
+      }
+    }
+    const sections = cats
+      .filter((c) => byCategory.has(c.id))
+      .map((c) => ({ id: c.id, name: c.name, items: byCategory.get(c.id) ?? [] }));
+    return { hasCategories: cats.length > 0, sections, uncategorized };
+  }, [list, pocketCategories.data]);
+
+  function renderPocketRow(pocket: PocketRow) {
+    const negative = pocket.balance < 0;
+    const share = positiveTotal > 0 && !negative ? Math.round((pocket.balance / positiveTotal) * 100) : 0;
+    return (
+      <LedgerRow
+        key={pocket.id}
+        tile={
+          <span
+            className={cn(
+              "grid size-10 shrink-0 place-items-center text-[15px] font-bold leading-none tabular-nums",
+              negative
+                ? "bg-[repeating-linear-gradient(135deg,var(--plane-out)_0_2px,transparent_2px_6px)] text-foreground"
+                : "bg-plane-in text-white",
+            )}
+            aria-hidden
+          >
+            {negative ? "−" : `${share}%`}
+          </span>
+        }
+        title={pocket.name}
+        meta={negative ? <span className="text-ink-out">saldo negativo</span> : pocket.description || null}
+        amount={
+          <span className={negative ? "text-ink-out" : undefined}>
+            {formatAmount(pocket.balance, negative ? "−" : undefined)}
+          </span>
+        }
+        onOpen={() => openEdit(pocket)}
+        openLabel={`Editar ${pocket.name}`}
+      />
+    );
+  }
+
+  function sumBalance(items: PocketRow[]) {
+    const sum = items.reduce((s, p) => s + p.balance, 0);
+    return formatAmount(sum, sum < 0 ? "−" : undefined);
+  }
+
+  function countLabel(n: number) {
+    return `${n} ${n === 1 ? "caixinha" : "caixinhas"}`;
+  }
 
   return (
     <div className="pb-4">
@@ -229,7 +319,7 @@ export function PocketManagement() {
           value={formatAmount(total)}
           negative={total < 0}
           loading={pockets.isLoading}
-          meta={`${list.length} ${list.length === 1 ? "caixinha" : "caixinhas"}`}
+          meta={countLabel(list.length)}
         />
         {pockets.isLoading ? (
           <div className="mt-5 h-12 animate-pulse bg-muted md:mt-0" />
@@ -259,46 +349,30 @@ export function PocketManagement() {
             criar a primeira caixinha
           </Button>
         </div>
+      ) : groups.hasCategories ? (
+        <>
+          {groups.sections.map((section) => (
+            <LedgerGroup
+              key={section.id}
+              title={section.name}
+              aside={sumBalance(section.items)}
+              meta={countLabel(section.items.length)}
+            >
+              {section.items.map(renderPocketRow)}
+            </LedgerGroup>
+          ))}
+          {groups.uncategorized.length > 0 ? (
+            <LedgerGroup
+              title="sem categoria"
+              aside={sumBalance(groups.uncategorized)}
+              meta={countLabel(groups.uncategorized.length)}
+            >
+              {groups.uncategorized.map(renderPocketRow)}
+            </LedgerGroup>
+          ) : null}
+        </>
       ) : (
-        <div className="mt-8 border-t-2 border-foreground">
-          {list.map((pocket) => {
-            const negative = pocket.balance < 0;
-            const share = positiveTotal > 0 && !negative ? Math.round((pocket.balance / positiveTotal) * 100) : 0;
-            return (
-              <LedgerRow
-                key={pocket.id}
-                tile={
-                  <span
-                    className={cn(
-                      "grid size-10 shrink-0 place-items-center text-[15px] font-bold leading-none tabular-nums",
-                      negative
-                        ? "bg-[repeating-linear-gradient(135deg,var(--plane-out)_0_2px,transparent_2px_6px)] text-foreground"
-                        : "bg-plane-in text-white",
-                    )}
-                    aria-hidden
-                  >
-                    {negative ? "−" : `${share}%`}
-                  </span>
-                }
-                title={pocket.name}
-                meta={
-                  negative ? (
-                    <span className="text-ink-out">saldo negativo</span>
-                  ) : (
-                    pocket.description || null
-                  )
-                }
-                amount={
-                  <span className={negative ? "text-ink-out" : undefined}>
-                    {formatAmount(pocket.balance, negative ? "−" : undefined)}
-                  </span>
-                }
-                onOpen={() => openEdit(pocket)}
-                openLabel={`Editar ${pocket.name}`}
-              />
-            );
-          })}
-        </div>
+        <div className="mt-8 border-t-2 border-foreground">{list.map(renderPocketRow)}</div>
       )}
 
       <Modal open={openCreatePocket} onClose={() => setOpenCreatePocket(false)} title="nova caixinha" size="md">
@@ -308,6 +382,14 @@ export function PocketManagement() {
           </Field>
           <Field label="Descrição (opcional)" htmlFor="pocket-desc">
             <Input id="pocket-desc" placeholder="Ex: Para imprevistos" {...pocketForm.register("description")} />
+          </Field>
+          <Field label="Categoria" hint="Só para agrupar caixinhas. Não é a categoria das compras.">
+            <SelectOptions
+              aria-label="Categoria da caixinha"
+              value={pocketForm.watch("categoryId") ?? ""}
+              onValueChange={(v) => pocketForm.setValue("categoryId", v)}
+              options={categoryOptions}
+            />
           </Field>
           <Field label="Valor inicial" htmlFor="pocket-initial" hint="Não sai da conta corrente.">
             <CurrencyInput
@@ -335,6 +417,14 @@ export function PocketManagement() {
           <Field label="Descrição (opcional)" htmlFor="edit-desc">
             <Input id="edit-desc" placeholder="Ex: Para imprevistos" {...editForm.register("description")} />
           </Field>
+          <Field label="Categoria" hint="Só para agrupar caixinhas. Não é a categoria das compras.">
+            <SelectOptions
+              aria-label="Categoria da caixinha"
+              value={editForm.watch("categoryId") ?? ""}
+              onValueChange={(v) => editForm.setValue("categoryId", v)}
+              options={categoryOptions}
+            />
+          </Field>
           <Field
             label="Saldo"
             htmlFor="edit-balance"
@@ -342,7 +432,7 @@ export function PocketManagement() {
               editingPocket ? (
                 <>
                   Hoje <span className="font-medium tabular-nums text-foreground">{formatCurrency(editingPocket.balance)}</span>
-                  . A diferença vira um ajuste.
+                  . Só muda o saldo. Não conta como entrada nem como saída do mês.
                 </>
               ) : null
             }
@@ -354,7 +444,20 @@ export function PocketManagement() {
               onChange={(v) => editForm.setValue("newBalance", v)}
             />
           </Field>
-          <FormActions>
+          <FormActions
+            aside={
+              editingPocket ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-ink-out hover:text-ink-out sm:w-auto"
+                  onClick={() => setDeletingPocket(editingPocket)}
+                >
+                  excluir
+                </Button>
+              ) : null
+            }
+          >
             <Button type="button" variant="outline" onClick={() => setEditingPocket(null)}>
               Cancelar
             </Button>
@@ -363,6 +466,44 @@ export function PocketManagement() {
             </Button>
           </FormActions>
         </form>
+      </Modal>
+
+      <Modal open={!!deletingPocket} onClose={() => setDeletingPocket(null)} title="excluir caixinha?" size="sm">
+        <div className="space-y-4">
+          {deletingPocket ? (
+            <p className="text-[15px] text-muted-foreground">
+              <span className="font-medium text-foreground">{deletingPocket.name}</span> sai da lista.
+              {Math.abs(deletingPocket.balance) > 1e-6 ? (
+                <>
+                  {" "}
+                  Ainda tem{" "}
+                  <span className="font-medium tabular-nums text-foreground">{formatCurrency(deletingPocket.balance)}</span>.
+                  Transfira esse saldo antes de excluir.
+                </>
+              ) : (
+                " Sem saldo, então nada se perde."
+              )}
+            </p>
+          ) : null}
+          <p className="text-[15px] text-muted-foreground">
+            Se houver compras, depósitos, recorrências ou metas ligados a ela, a exclusão é recusada para manter o histórico.
+          </p>
+          <FormActions>
+            <Button type="button" variant="outline" onClick={() => setDeletingPocket(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onConfirmDelete}
+              disabled={
+                deletePocket.isPending || (deletingPocket !== null && Math.abs(deletingPocket.balance) > 1e-6)
+              }
+            >
+              {deletePocket.isPending ? "Excluindo…" : "Excluir"}
+            </Button>
+          </FormActions>
+        </div>
       </Modal>
 
       <Modal open={openTransfer} onClose={() => setOpenTransfer(false)} title="transferir" size="md">

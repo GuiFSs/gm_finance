@@ -291,6 +291,7 @@ function BalancesSection({ data, loading }: { data?: DashboardData; loading: boo
             <p className="text-[15px] text-muted-foreground">
               Hoje:{" "}
               <span className="font-medium text-foreground tabular-nums">{formatCurrency(data.checkingBalance)}</span>
+              . Só muda o saldo. Não conta como entrada nem como saída do mês.
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="account-new-balance">Novo saldo</Label>

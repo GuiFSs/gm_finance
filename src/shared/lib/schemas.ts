@@ -26,12 +26,14 @@ export const createPocketSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   initialAmount: z.coerce.number().min(0).optional().default(0),
+  categoryId: z.string().nullable().optional(),
   createdByUserId: z.string().min(1),
 });
 
 export const updatePocketSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional().nullable(),
+  categoryId: z.string().nullable().optional(),
 });
 
 const transferSourceSchema = z.object({

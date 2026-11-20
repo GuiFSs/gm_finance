@@ -10,6 +10,7 @@ import { DayTile, LedgerRow, MonthSwitcher, PaidCheck, type TileTone } from "@/f
 import {
   computeMonthTotals,
   currentMonthParam,
+  isBalanceAdjustment,
   dayOfMonth,
   daysFromToday,
   dueWord,
@@ -156,7 +157,7 @@ export function MovementsList() {
   const purchasePendingId = setPurchasePaid.isPending ? setPurchasePaid.variables?.purchaseId : undefined;
   const cardPendingId = setStatementPaid.isPending ? setStatementPaid.variables?.cardId : undefined;
 
-  const list = data?.data;
+  const list = useMemo(() => data?.data?.filter((row) => !isBalanceAdjustment(row)), [data]);
   const sourcesSummary = data?.sourcesSummary;
   const isCurrentMonth = month === current;
   const todayStr = todayYmd();

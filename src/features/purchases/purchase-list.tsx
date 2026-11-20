@@ -8,10 +8,12 @@ import { toast } from "sonner";
 
 import { PurchaseDetailDialog } from "@/features/purchases/purchase-detail-dialog";
 import {
+  useCards,
   useCategories,
   useCreateCategory,
   useCreateTag,
   useCurrentUser,
+  usePockets,
   usePurchases,
   useTags,
   useUsers,
@@ -41,10 +43,28 @@ const defaultFilters = {
   tagIds: [] as string[],
   uncategorized: false,
   untagged: false,
+  /** Valor do select de meio de pagamento: "", "account", "card", "card:<id>", "pocket" ou "pocket:<id>". */
+  payment: "",
   userId: "",
   startDate: "",
   endDate: "",
 };
+
+type PaymentFilterParams = {
+  paymentSourceType?: "account" | "pocket" | "card";
+  paymentSourceId?: string;
+};
+
+/** Converte a opção escolhida no select em parâmetros da API de compras. */
+function parsePaymentFilter(value: string): PaymentFilterParams {
+  if (!value) return {};
+  const [type, id] = value.split(":");
+  if (type === "account") return { paymentSourceType: "account" };
+  if (type === "pocket" || type === "card") {
+    return { paymentSourceType: type, paymentSourceId: id || undefined };
+  }
+  return {};
+}
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -269,18 +289,26 @@ export function PurchaseList() {
 
   const editFromUrl = searchParams.get("edit");
   const newFromUrl = searchParams.get("new");
+  const urlIntent = editFromUrl ? `edit:${editFromUrl}` : newFromUrl ? "new" : null;
+  const [handledIntent, setHandledIntent] = useState<string | null>(null);
+  if (urlIntent !== handledIntent) {
+    setHandledIntent(urlIntent);
+    if (urlIntent) {
+      setEditPurchaseId(editFromUrl);
+      setOpenPurchaseModal(true);
+    }
+  }
   useEffect(() => {
-    if (!editFromUrl && !newFromUrl) return;
-    setEditPurchaseId(editFromUrl);
-    setOpenPurchaseModal(true);
+    if (!urlIntent) return;
     router.replace("/purchases", { scroll: false });
-  }, [editFromUrl, newFromUrl, router]);
+  }, [urlIntent, router]);
 
   const purchases = usePurchases({
     categoryIds: filters.categoryIds.length ? filters.categoryIds : undefined,
     tagIds: filters.tagIds.length ? filters.tagIds : undefined,
     uncategorized: filters.uncategorized || undefined,
     untagged: filters.untagged || undefined,
+    ...parsePaymentFilter(filters.payment),
     userId: filters.userId || undefined,
     startDate: filters.startDate || undefined,
     endDate: filters.endDate || undefined,
@@ -289,6 +317,19 @@ export function PurchaseList() {
   const categories = useCategories();
   const users = useUsers();
   const tags = useTags();
+  const pockets = usePockets();
+  const cards = useCards();
+  const paymentOptions = useMemo(
+    () => [
+      { value: "", label: "Todos" },
+      { value: "account", label: "Conta corrente" },
+      { value: "card", label: "Todos os cartões" },
+      ...(cards.data ?? []).map((c) => ({ value: `card:${c.id}`, label: `Cartão ${c.name}` })),
+      { value: "pocket", label: "Todas as caixinhas" },
+      ...(pockets.data ?? []).map((p) => ({ value: `pocket:${p.id}`, label: `Caixinha ${p.name}` })),
+    ],
+    [cards.data, pockets.data],
+  );
   const currentUser = useCurrentUser();
   const createCategory = useCreateCategory();
   const createTag = useCreateTag();
@@ -319,6 +360,7 @@ export function PurchaseList() {
     for (const id of filters.categoryIds) labels.push(catName.get(id) ?? "categoria");
     if (filters.untagged) labels.push("sem tag");
     for (const id of filters.tagIds) labels.push(`#${tagName.get(id) ?? "tag"}`);
+    if (filters.payment) labels.push(paymentOptions.find((o) => o.value === filters.payment)?.label ?? "pagamento");
     if (filters.userId) labels.push((users.data ?? []).find((u) => u.id === filters.userId)?.name ?? "usuário");
     if (filters.startDate || filters.endDate) {
       const fmt = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -331,7 +373,7 @@ export function PurchaseList() {
       );
     }
     return labels;
-  }, [filters, categories.data, tags.data, users.data]);
+  }, [filters, categories.data, tags.data, users.data, paymentOptions]);
   const hasActiveFilters = activeFilterLabels.length > 0;
 
   const list = purchases.data ?? [];
@@ -480,6 +522,15 @@ export function PurchaseList() {
                   setFilters((prev) => ({ ...prev, tagIds, untagged: tagIds.length ? false : prev.untagged }))
                 }
               />
+              <div className="space-y-1.5">
+                <Label htmlFor="filter-payment">Meio de pagamento</Label>
+                <SelectOptions
+                  id="filter-payment"
+                  value={filters.payment}
+                  onValueChange={(v) => setFilters((prev) => ({ ...prev, payment: v }))}
+                  options={paymentOptions}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="filter-user">Quem lançou</Label>
                 <SelectOptions

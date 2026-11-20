@@ -63,9 +63,18 @@ export function rowStatus(row: MonthMovementRow): MonthStatus {
   return "pago";
 }
 
+/**
+ * Ajuste de saldo (conta ou caixinha) muda o saldo guardado.
+ * Não é entrada nem saída: fica de fora do entra/sai, da sobra e da lista do mês.
+ */
+export function isBalanceAdjustment(row: MonthMovementRow): boolean {
+  return row.id.includes("adjustment") || row.extra === "Ajuste";
+}
+
 export function computeMonthTotals(list: MonthMovementRow[] | undefined): MonthTotals {
   const t = { inRealized: 0, futureIn: 0, pago: 0, aberto: 0, previsto: 0 };
   for (const row of list ?? []) {
+    if (isBalanceAdjustment(row)) continue;
     const amount = Math.abs(row.amount);
     if (row.type === "in") t.inRealized += amount;
     else if (row.type === "future_in") t.futureIn += amount;

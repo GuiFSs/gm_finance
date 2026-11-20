@@ -18,6 +18,8 @@ App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: N
 - Domínio financeiro central: `src/shared/lib/finance-service.ts`, orçamentos em `budget-service.ts`
 - Fatura de cartão: `src/shared/lib/card-statement.ts` — mês da fatura = **mês do vencimento** (caixa). Compras no dia de fechamento em diante vão para a próxima fatura. Ex.: fecha 30, vence 7; compra 15/09 aparece em movimentos de outubro com venc. 07/10.
 - Quitação manual em `/movements`: despesa de conta/caixinha tem `purchases.paid_at` (cada parcela é uma linha). Cartão usa `card_statement_payments` (`card_id` + `statement_month`); marcar a fatura quita todas as compras daquele mês. A data não marca mais “já pago”. Entradas, transferências e ajustes ficam de fora.
+- Ajustes de saldo (`balance_adjustments`, em conta ou caixinha) mudam o saldo e **não** são entrada nem saída. `getMonthMovements` não gera linha. `computeMonthTotals` (`isBalanceAdjustment`) tira o valor do entra/sai/sobra do dashboard, do ano e de `/movements`. `computeSourcesSummary` não soma o ajuste como saída a cobrir.
+- Categoria de caixinha (`pocket_categories`) é separada de `categories` (compras). `pockets.category_id` é opcional e só agrupa caixinhas.
 - Auth gate (Next 16): `src/proxy.ts` (não existe `middleware.ts`)
 - UI: regra shadcn → `src/shared/ui`; skill deploy → `.cursor/skills/vercel-production-deploy`
 
@@ -51,7 +53,7 @@ App privado de finanças para **dois usuários** (Guilherme e Maryane). Stack: N
 
 Nav: shell em `src/shared/ui/app-shell.tsx` (rotas protegidas via `(protected)/layout.tsx`). Desktop: sidebar `w-60` com botão "nova compra". Mobile: tab bar fixa (início, movimentos, "+" nova compra, compras, mais); "mais" abre um Sheet com as outras rotas, "comando por voz" e "sair". Não há top bar mobile.
 
-Query params: `/purchases?new=1` abre o form de nova compra; `/purchases?edit=<id>` abre a edição. `/purchases?categoryId=&tagId=&uncategorized=1&untagged=1&startDate=&endDate=` inicia os filtros (o dashboard usa isso ao tocar categoria, tag, "sem categoria" ou "sem tag"). `/movements?month=YYYY-MM&status=pago|aberto|previsto|entradas` (±12 meses) filtra a lista; o dashboard usa isso ao clicar no plano do mês.
+Query params: `/purchases?new=1` abre o form de nova compra; `/purchases?edit=<id>` abre a edição. `/purchases?categoryId=&tagId=&uncategorized=1&untagged=1&startDate=&endDate=` inicia os filtros (o sheet de filtros também tem "meio de pagamento": na API, `paymentSourceType=account|pocket|card` + `paymentSourceId` opcional) (o dashboard usa isso ao tocar categoria, tag, "sem categoria" ou "sem tag"). `/movements?month=YYYY-MM&status=pago|aberto|previsto|entradas` (±12 meses) filtra a lista; o dashboard usa isso ao clicar no plano do mês.
 
 `/dashboard` é a leitura do mês ou do ano: sobra (mesma conta de `computeMonthTotals`, por mês de vencimento), plano do mês, pizza de entra/sai/sobra no mês, 12 colunas no ano, saldos de agora e pizza por categoria (porcentagem; sem categoria = "sem categoria"). Tocar uma categoria ou tag abre `/purchases` filtrada; o botão "tags" na linha abre a pizza das tags (sem tag = "sem tag", que também abre compras). No ano, pizza | por mês troca essa seção por doze colunas no mesmo desenho do gráfico do ano: cada coluna é um mês empilhado nas cores das categorias. Tocar a coluna lista a porcentagem e o valor daquele mês. A categoria aberta redesenha as colunas nas cores das tags. Marcar pago fica em movimentos.
 
@@ -63,7 +65,8 @@ Query params: `/purchases?new=1` abre o form de nova compra; `/purchases?edit=<i
 | Dashboard / ledger | `GET /api/dashboard`, `POST /api/adjustments`, `GET /api/movements` |
 | Purchases | CRUD `/api/purchases`, `[id]`; `PATCH /api/purchases/[id]/paid` (conta/caixinha); `POST /api/purchases/parse-voice` (Gemini, despesa no form) |
 | Voice (geral) | `POST /api/voice/parse` (Gemini multi-intent; **não** executa) |
-| Pockets | GET/POST, `PATCH [id]`, `POST transfer` — **sem DELETE** |
+| Pockets | GET/POST, `PATCH [id]` (nome, descrição, `categoryId`), `DELETE [id]` (só sem saldo e sem vínculos), `POST transfer` |
+| Pocket categories | GET/POST, PATCH/DELETE `[id]` (delete desvincula as caixinhas, não as apaga) |
 | Cards | GET/POST, `PATCH [id]`, `statement-funding`, `PUT [id]/statement-payment` — **sem DELETE** |
 | Recurring | CRUD + `POST /api/recurring/run` |
 | Deposits | CRUD deposits + CRUD `recurring-deposits` |
@@ -104,7 +107,8 @@ Query params: `/purchases?new=1` abre o form de nova compra; `/purchases?edit=<i
 
 - Telegram bot: não existe em `src/` (env reservado)
 - Goals: sem edit/delete
-- Cards / pockets: sem DELETE API
+- Cards: sem DELETE API
+- Caixinha com compra, depósito, recorrência, meta ou funding de fatura ligado: não pode ser excluída (preserva histórico)
 - Tags: sem PATCH/DELETE
 - `ideias.md` na raiz: nota solta (não é spec oficial)
 

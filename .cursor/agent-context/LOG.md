@@ -2,6 +2,28 @@
 
 Entradas mais recentes no topo. Ver skill `document-changes` para o formato.
 
+## 2026-11-20 — migration 0015 aplicada no Turso
+
+- Status: `estável`
+- Resumo: `0015_pocket_categories` rodou no Turso de produção. `pocket_categories` e `pockets.category_id` existem. A `0014` já estava aplicada. Em seguida, commit e push em `main`.
+- Arquivos-chave: `src/db/migrations/0015_pocket_categories.sql`
+- Próximo: smoke no navegador depois do deploy
+
+## 2026-11-20 — ajuste de saldo fora do entra e do sai
+
+- Status: `pronto-para-revisar`
+- Resumo: Editar o saldo da conta ou de uma caixinha continua mudando o saldo, mas o valor não conta como entrada nem como saída. A regra está em `computeMonthTotals`, então vale no dashboard, no ano e em movimentos, não só na lista.
+- Arquivos-chave: `src/features/month/month-model.ts`, `src/features/movements/movements-list.tsx`, `src/shared/lib/finance-service.ts`
+- Próximo: smoke no navegador ao editar a conta corrente e conferir entra/sai no início e em movimentos
+
+## 2026-11-20 — excluir caixinha, categoria de caixinha, filtro por pagamento, ajustes fora do mês
+
+- Status: `pronto-para-revisar`
+- Resumo: Caixinha pode ser excluída quando não tem saldo nem vínculo com compras, depósitos, recorrências, metas ou fatura. Categorias de caixinha (`pocket_categories`, aba em `/categories`) agrupam caixinhas em `/pockets`. Compras ganharam filtro por meio de pagamento (conta, cartão, caixinha; geral ou específico). Ajustes de saldo saíram do fluxo de entradas e saídas de `/movements`.
+- Arquivos-chave: `src/db/migrations/0015_pocket_categories.sql`, `src/shared/lib/finance-service.ts`, `src/features/pockets/pocket-management.tsx`, `src/features/categories/category-management.tsx`, `src/features/purchases/purchase-list.tsx`
+- Próximo: aplicar migration 0015 no Turso de produção antes do deploy; smoke no navegador; commit/push
+
+
 ## 2026-11-17 — sem categoria e sem tag abrem compras
 
 - Status: `pronto-para-revisar`

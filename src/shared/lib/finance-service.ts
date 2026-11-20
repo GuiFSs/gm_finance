@@ -67,14 +67,82 @@ export async function getPocketBalances() {
       id: schema.pockets.id,
       name: schema.pockets.name,
       description: schema.pockets.description,
+      categoryId: schema.pockets.categoryId,
+      categoryName: schema.pocketCategories.name,
       balance: sql<number>`coalesce(sum(case when ${schema.pocketEntries.referenceType} = 'purchase' and ${schema.pocketEntries.occurredAt} > ${cutoff} then 0 else ${schema.pocketEntries.amount} end), 0)`,
     })
     .from(schema.pockets)
     .leftJoin(schema.pocketEntries, eq(schema.pocketEntries.pocketId, schema.pockets.id))
+    .leftJoin(schema.pocketCategories, eq(schema.pocketCategories.id, schema.pockets.categoryId))
     .groupBy(schema.pockets.id)
     .orderBy(asc(schema.pockets.name));
 
   return rows;
+}
+
+/** Valida que a categoria de caixinha informada existe (null/undefined = sem categoria). */
+export async function assertPocketCategoryExists(categoryId: string | null | undefined) {
+  if (!categoryId) return;
+  const [row] = await db
+    .select({ id: schema.pocketCategories.id })
+    .from(schema.pocketCategories)
+    .where(eq(schema.pocketCategories.id, categoryId))
+    .limit(1);
+  if (!row) throw new Error("Categoria de caixinha não encontrada");
+}
+
+/**
+ * Exclui uma caixinha só quando ela não tem saldo e nada ligado a ela (compras, depósitos,
+ * recorrências, metas, funding de fatura). Assim o histórico de movimentos não fica órfão.
+ */
+export async function deletePocketIfUnused(pocketId: string): Promise<"deleted" | "not_found"> {
+  const [pocket] = await db
+    .select({ id: schema.pockets.id })
+    .from(schema.pockets)
+    .where(eq(schema.pockets.id, pocketId))
+    .limit(1);
+  if (!pocket) return "not_found";
+
+  const balances = await getPocketBalances();
+  const balance = balances.find((p) => p.id === pocketId)?.balance ?? 0;
+  if (Math.abs(balance) > DEPOSIT_SUM_EPS) {
+    throw new Error(
+      "A caixinha ainda tem saldo. Transfira o valor para outra caixinha ou para a conta corrente antes de excluir.",
+    );
+  }
+
+  const linked = await Promise.all([
+    db.select({ id: schema.purchases.id }).from(schema.purchases)
+      .where(and(eq(schema.purchases.paymentSourceType, "pocket"), eq(schema.purchases.paymentSourceId, pocketId)))
+      .limit(1),
+    db.select({ id: schema.depositSplits.id }).from(schema.depositSplits)
+      .where(eq(schema.depositSplits.pocketId, pocketId)).limit(1),
+    db.select({ id: schema.deposits.id }).from(schema.deposits)
+      .where(eq(schema.deposits.pocketId, pocketId)).limit(1),
+    db.select({ id: schema.recurringDeposits.id }).from(schema.recurringDeposits)
+      .where(eq(schema.recurringDeposits.pocketId, pocketId)).limit(1),
+    db.select({ id: schema.recurringDepositSplits.id }).from(schema.recurringDepositSplits)
+      .where(eq(schema.recurringDepositSplits.pocketId, pocketId)).limit(1),
+    db.select({ id: schema.recurringExpenses.id }).from(schema.recurringExpenses)
+      .where(and(eq(schema.recurringExpenses.paymentSourceType, "pocket"), eq(schema.recurringExpenses.paymentSourceId, pocketId)))
+      .limit(1),
+    db.select({ id: schema.cardStatementFundingSplits.id }).from(schema.cardStatementFundingSplits)
+      .where(eq(schema.cardStatementFundingSplits.pocketId, pocketId)).limit(1),
+    db.select({ id: schema.goals.id }).from(schema.goals)
+      .where(eq(schema.goals.pocketId, pocketId)).limit(1),
+  ]);
+  if (linked.some((rows) => rows.length > 0)) {
+    throw new Error(
+      "Esta caixinha tem compras, depósitos, recorrências ou metas ligadas a ela. Para não perder o histórico, ela não pode ser excluída.",
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    // Saldo zerado: as linhas restantes se anulam e somem junto com a caixinha.
+    await tx.delete(schema.pocketEntries).where(eq(schema.pocketEntries.pocketId, pocketId));
+    await tx.delete(schema.pockets).where(eq(schema.pockets.id, pocketId));
+  });
+  return "deleted";
 }
 
 export async function getTotalBalance() {
@@ -546,6 +614,9 @@ export async function getPurchases(filters: {
   uncategorized?: boolean;
   /** Compras sem nenhuma tag. */
   untagged?: boolean;
+  /** Meio de pagamento: todos de um tipo (conta, caixinha ou cartão) ou um item específico. */
+  paymentSourceType?: PaymentSourceType;
+  paymentSourceId?: string;
   userId?: string;
   startDate?: string;
   endDate?: string;
@@ -555,6 +626,10 @@ export async function getPurchases(filters: {
     conditions.push(inArray(schema.purchases.categoryId, filters.categoryIds));
   }
   if (filters.uncategorized) conditions.push(isNull(schema.purchases.categoryId));
+  if (filters.paymentSourceType) {
+    conditions.push(eq(schema.purchases.paymentSourceType, filters.paymentSourceType));
+  }
+  if (filters.paymentSourceId) conditions.push(eq(schema.purchases.paymentSourceId, filters.paymentSourceId));
   if (filters.userId) conditions.push(eq(schema.purchases.createdByUserId, filters.userId));
   if (filters.startDate) conditions.push(gte(schema.purchases.purchaseDate, filters.startDate));
   if (filters.endDate) conditions.push(lte(schema.purchases.purchaseDate, filters.endDate));
@@ -1307,7 +1382,15 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
       referenceId: schema.accountEntries.referenceId,
     })
     .from(schema.accountEntries)
-    .where(and(gte(schema.accountEntries.occurredAt, start), lte(schema.accountEntries.occurredAt, end), sql`${schema.accountEntries.amount} > 0`));
+    .where(
+      and(
+        gte(schema.accountEntries.occurredAt, start),
+        lte(schema.accountEntries.occurredAt, end),
+        sql`${schema.accountEntries.amount} > 0`,
+        ne(schema.accountEntries.referenceType, "balance_adjustment"),
+      ),
+    );
+  // Ajustes de saldo (conta ou caixinha) mudam o saldo, mas não são entrada nem saída do mês.
   for (const e of accountEntriesIn) {
     if (e.referenceType === "transfer") {
       movements.push({
@@ -1318,22 +1401,6 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
         amount: e.amount,
         source: "Conta corrente",
         extra: "Transferência",
-      });
-    }
-    if (e.referenceType === "balance_adjustment") {
-      const adj = await db
-        .select({ reason: schema.balanceAdjustments.reason })
-        .from(schema.balanceAdjustments)
-        .where(eq(schema.balanceAdjustments.id, e.referenceId))
-        .limit(1);
-      movements.push({
-        id: `adjustment-in-${e.id}`,
-        type: "in",
-        date: e.occurredAt,
-        title: adj[0]?.reason ?? "Ajuste",
-        amount: e.amount,
-        source: "Conta corrente",
-        extra: "Ajuste",
       });
     }
   }
@@ -1435,7 +1502,8 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
         gte(schema.accountEntries.occurredAt, start),
         lte(schema.accountEntries.occurredAt, end),
         sql`${schema.accountEntries.amount} < 0`,
-        ne(schema.accountEntries.referenceType, "purchase")
+        ne(schema.accountEntries.referenceType, "purchase"),
+        ne(schema.accountEntries.referenceType, "balance_adjustment"),
       )
     );
   for (const e of accountEntriesOut) {
@@ -1450,24 +1518,6 @@ export async function getMonthMovements(month: string): Promise<MonthMovement[]>
         sourceType: "account",
         sourceId: null,
         extra: "Saída",
-      });
-    }
-    if (e.referenceType === "balance_adjustment") {
-      const adj = await db
-        .select({ reason: schema.balanceAdjustments.reason })
-        .from(schema.balanceAdjustments)
-        .where(eq(schema.balanceAdjustments.id, e.referenceId))
-        .limit(1);
-      movements.push({
-        id: `adjustment-${e.id}`,
-        type: "out",
-        date: e.occurredAt,
-        title: adj[0]?.reason ?? "Ajuste",
-        amount: e.amount,
-        source: "Conta corrente",
-        sourceType: "account",
-        sourceId: null,
-        extra: "Ajuste",
       });
     }
   }
@@ -1604,6 +1654,8 @@ export function computeSourcesSummary(
   const cardOutflows = new Map<string, number>();
 
   for (const o of outflows) {
+    // Ajuste de saldo não é saída a cobrir: já está no saldo.
+    if (o.id.includes("adjustment") || o.extra === "Ajuste") continue;
     if (purchaseOutflowAlreadyInLedgerBalance(o, ledgerCutoff)) continue;
     const amount = Math.abs(o.amount);
     if (o.sourceType === "account" || !o.sourceType) {
